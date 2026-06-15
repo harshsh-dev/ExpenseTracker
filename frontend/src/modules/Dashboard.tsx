@@ -13,6 +13,7 @@ import { IconCalendar } from '@tabler/icons-react'
 import { useCategories, useExpenses, useIncomes, useInvestments } from '../api/hooks'
 import { investmentCurrentValue } from '../types'
 import { Card, Empty } from '../components/ui'
+import { IncomeAllocationPie } from '../components/IncomeAllocationPie'
 import { formatMoney, isoDateParts, monthName } from '../lib/format'
 import { useTheme } from '../theme'
 import { useFeatures } from '../features'
@@ -189,17 +190,50 @@ export default function Dashboard() {
           )}
 
           {(hasIncome || hasExpenses) && (
-            <Card>
-            <div className="card-title">Income vs Expense (last 6 months)</div>
-            <div style={{ width: '100%', height: 280 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthly} barGap={6}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
-                  <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} />
-                  <YAxis stroke={chart.axis} fontSize={12} width={52} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    cursor={{ fill: chart.cursor }}
-                    contentStyle={{
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Card>
+                <div className="card-title">Income vs Expense (last 6 months)</div>
+                <div style={{ width: '100%', height: 280 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthly} barGap={6}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                      <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} />
+                      <YAxis stroke={chart.axis} fontSize={12} width={52} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        cursor={{ fill: chart.cursor }}
+                        contentStyle={{
+                          background: chart.tooltipBg,
+                          border: `0.5px solid ${chart.tooltipBorder}`,
+                          borderRadius: 8,
+                          fontSize: 12,
+                          color: chart.tooltipText,
+                        }}
+                        labelStyle={{ color: chart.tooltipText }}
+                        formatter={(v) => formatMoney(Number(v))}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      {hasIncome && (
+                        <Bar dataKey="income" name="Income" fill="#1d9e75" radius={[4, 4, 0, 0]} />
+                      )}
+                      {hasExpenses && (
+                        <Bar dataKey="expense" name="Expense" fill="#d4537e" radius={[4, 4, 0, 0]} />
+                      )}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              <Card>
+                <div className="card-title">Income allocation</div>
+                {hasIncome && totalIncome > 0 ? (
+                  <IncomeAllocationPie
+                    income={totalIncome}
+                    categories={byCategory.map((c) => ({
+                      name: c.name,
+                      value: c.value,
+                      color: c.color,
+                    }))}
+                    tooltipStyle={{
                       background: chart.tooltipBg,
                       border: `0.5px solid ${chart.tooltipBorder}`,
                       borderRadius: 8,
@@ -207,19 +241,12 @@ export default function Dashboard() {
                       color: chart.tooltipText,
                     }}
                     labelStyle={{ color: chart.tooltipText }}
-                    formatter={(v) => formatMoney(Number(v))}
                   />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {hasIncome && (
-                    <Bar dataKey="income" name="Income" fill="#1d9e75" radius={[4, 4, 0, 0]} />
-                  )}
-                  {hasExpenses && (
-                    <Bar dataKey="expense" name="Expense" fill="#d4537e" radius={[4, 4, 0, 0]} />
-                  )}
-              </BarChart>
-              </ResponsiveContainer>
+                ) : (
+                  <Empty>No income recorded yet.</Empty>
+                )}
+              </Card>
             </div>
-          </Card>
           )}
         </>
       )}
