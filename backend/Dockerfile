@@ -13,6 +13,9 @@ COPY --from=build /out/server /app/server
 # snapshot persists here; mount a volume to survive redeploys
 ENV DATA_PATH=/app/data/snapshot.json
 ENV PORT=8080
+# enabled features: "all" or a comma-separated subset, e.g. "income,expenses"
+# (override at runtime: docker run -e FEATURES=income,expenses ...)
+ENV FEATURES=all
 VOLUME /app/data
 EXPOSE 8080
 CMD ["/app/server"]
