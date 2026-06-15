@@ -10,13 +10,15 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"moneytracker/backend/internal/config"
 	"moneytracker/backend/internal/domain"
 	"moneytracker/backend/internal/quotes"
 	"moneytracker/backend/internal/store"
 )
 
-// NewRouter builds the HTTP handler for the API.
-func NewRouter(s *store.Store, q *quotes.Service, allowedOrigins []string) http.Handler {
+// NewRouter builds the HTTP handler for the API. Only routes for enabled
+// features are mounted; the resolved feature set is advertised at /api/config.
+func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowedOrigins []string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -36,36 +38,58 @@ func NewRouter(s *store.Store, q *quotes.Service, allowedOrigins []string) http.
 	})
 
 	r.Route("/api", func(r chi.Router) {
-		crud[domain.Income]{
-			list: s.ListIncomes, create: s.CreateIncome,
-			update: s.UpdateIncome, delete: s.DeleteIncome,
-		}.mount(r, "/incomes")
+		// Always available so the frontend can discover the active features.
+		r.Get("/config", configHandler(feats))
 
-		crud[domain.Expense]{
-			list: s.ListExpenses, create: s.CreateExpense,
-			update: s.UpdateExpense, delete: s.DeleteExpense,
-		}.mount(r, "/expenses")
+		if feats.Enabled(config.Income) {
+			crud[domain.Income]{
+				list: s.ListIncomes, create: s.CreateIncome,
+				update: s.UpdateIncome, delete: s.DeleteIncome,
+			}.mount(r, "/incomes")
+		}
 
-		crud[domain.Investment]{
-			list: s.ListInvestments, create: s.CreateInvestment,
-			update: s.UpdateInvestment, delete: s.DeleteInvestment,
-		}.mount(r, "/investments")
+		if feats.Enabled(config.Expenses) {
+			crud[domain.Expense]{
+				list: s.ListExpenses, create: s.CreateExpense,
+				update: s.UpdateExpense, delete: s.DeleteExpense,
+			}.mount(r, "/expenses")
+		}
 
-		crud[domain.Category]{
-			list: s.ListCategories, create: s.CreateCategory,
-			update: s.UpdateCategory, delete: s.DeleteCategory,
-		}.mount(r, "/categories")
+		if feats.Enabled(config.Investments) {
+			crud[domain.Investment]{
+				list: s.ListInvestments, create: s.CreateInvestment,
+				update: s.UpdateInvestment, delete: s.DeleteInvestment,
+			}.mount(r, "/investments")
 
-		r.Get("/backup/export", exportHandler(s))
-		r.Post("/backup/import", importHandler(s))
+			r.Route("/quotes", func(r chi.Router) {
+				r.Post("/refresh", refreshPricesHandler(q))
+				r.Get("/search/{kind}", searchHandler(q))
+			})
+		}
 
-		r.Route("/quotes", func(r chi.Router) {
-			r.Post("/refresh", refreshPricesHandler(q))
-			r.Get("/search/{kind}", searchHandler(q))
-		})
+		if feats.Enabled(config.Categories) {
+			crud[domain.Category]{
+				list: s.ListCategories, create: s.CreateCategory,
+				update: s.UpdateCategory, delete: s.DeleteCategory,
+			}.mount(r, "/categories")
+		}
+
+		if feats.Enabled(config.Backup) {
+			r.Get("/backup/export", exportHandler(s))
+			r.Post("/backup/import", importHandler(s))
+		}
 	})
 
 	return r
+}
+
+func configHandler(feats config.Features) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"app":      store.AppName,
+			"features": feats.List(),
+		})
+	}
 }
 
 func refreshPricesHandler(q *quotes.Service) http.HandlerFunc {

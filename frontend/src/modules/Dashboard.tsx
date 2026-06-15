@@ -15,10 +15,15 @@ import { investmentCurrentValue } from '../types'
 import { Card, Empty } from '../components/ui'
 import { formatMoney, monthName } from '../lib/format'
 import { useTheme } from '../theme'
+import { useFeatures } from '../features'
 
 export default function Dashboard() {
   const { theme } = useTheme()
   const dark = theme === 'dark'
+  const features = useFeatures()
+  const hasIncome = features.has('income')
+  const hasExpenses = features.has('expenses')
+  const hasInvestments = features.has('investments')
   const chart = {
     grid: dark ? 'rgba(255,255,255,0.08)' : 'rgba(20,20,20,0.06)',
     axis: dark ? '#6f6f6a' : '#a0a09a',
@@ -103,104 +108,116 @@ export default function Dashboard() {
       </div>
 
       <div className="stats">
-        <Stat label="Total income" value={formatMoney(totalIncome)} />
-        <Stat label="Total expenses" value={formatMoney(totalExpense)} />
-        <Stat
-          label="Net savings"
-          value={formatMoney(net)}
-          sub={`${savingsRate.toFixed(0)}% savings rate`}
-          tone={net >= 0 ? 'positive' : 'negative'}
-        />
-        <Stat
-          label="Portfolio"
-          value={formatMoney(portfolio)}
-          sub={`${portfolioPnl >= 0 ? '+' : ''}${formatMoney(portfolioPnl)} P/L`}
-          tone={portfolioPnl >= 0 ? 'positive' : 'negative'}
-        />
+        {hasIncome && <Stat label="Total income" value={formatMoney(totalIncome)} />}
+        {hasExpenses && <Stat label="Total expenses" value={formatMoney(totalExpense)} />}
+        {hasIncome && hasExpenses && (
+          <Stat
+            label="Net savings"
+            value={formatMoney(net)}
+            sub={`${savingsRate.toFixed(0)}% savings rate`}
+            tone={net >= 0 ? 'positive' : 'negative'}
+          />
+        )}
+        {hasInvestments && (
+          <Stat
+            label="Portfolio"
+            value={formatMoney(portfolio)}
+            sub={`${portfolioPnl >= 0 ? '+' : ''}${formatMoney(portfolioPnl)} P/L`}
+            tone={portfolioPnl >= 0 ? 'positive' : 'negative'}
+          />
+        )}
       </div>
 
       {!hasData ? (
-        <Empty>Add some income and expenses to see your dashboard come alive.</Empty>
+        <Empty>Add some data to see your dashboard come alive.</Empty>
       ) : (
         <>
-          <div className="grid gap-5 lg:grid-cols-2">
-            <Card>
-              <div className="card-title">Spending by category</div>
-              {byCategory.length === 0 ? (
-                <Empty>No expenses yet.</Empty>
-              ) : (
-                byCategory.slice(0, 6).map((c) => (
-                  <div className="bar-row" key={c.name}>
-                    <div className="bar-label">
-                      <span className="pill-dot" style={{ background: c.color }} />
-                      {c.name}
-                    </div>
-                    <div className="bar-track">
-                      <div
-                        className="bar-fill"
-                        style={{ width: `${c.pct}%`, background: c.color }}
-                      />
-                    </div>
-                    <div className="bar-amt">{formatMoney(c.value)}</div>
-                  </div>
-                ))
-              )}
-            </Card>
-
-            <Card>
-              <div className="card-title">Recent expenses</div>
-              {recent.length === 0 ? (
-                <Empty>No expenses yet.</Empty>
-              ) : (
-                recent.map((e) => (
-                  <div className="txn" key={e.id}>
-                    <div
-                      className="txn-icon"
-                      style={{ background: (e.cat?.color ?? '#888780') + '22' }}
-                    >
-                      <span
-                        className="pill-dot"
-                        style={{ background: e.cat?.color ?? '#888780' }}
-                      />
-                    </div>
-                    <div className="txn-info">
-                      <div className="txn-name">{e.note || e.cat?.name || 'Expense'}</div>
-                      <div className="txn-cat">
-                        {e.cat?.name ?? 'Unknown'} · {e.date}
+          {hasExpenses && (
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Card>
+                <div className="card-title">Spending by category</div>
+                {byCategory.length === 0 ? (
+                  <Empty>No expenses yet.</Empty>
+                ) : (
+                  byCategory.slice(0, 6).map((c) => (
+                    <div className="bar-row" key={c.name}>
+                      <div className="bar-label">
+                        <span className="pill-dot" style={{ background: c.color }} />
+                        {c.name}
                       </div>
+                      <div className="bar-track">
+                        <div
+                          className="bar-fill"
+                          style={{ width: `${c.pct}%`, background: c.color }}
+                        />
+                      </div>
+                      <div className="bar-amt">{formatMoney(c.value)}</div>
                     </div>
-                    <div className="txn-amt negative">−{formatMoney(e.amount, e.currency)}</div>
-                  </div>
-                ))
-              )}
-            </Card>
-          </div>
+                  ))
+                )}
+              </Card>
 
-          <Card>
-            <div className="card-title">Income vs Expense (last 6 months)</div>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={monthly} barGap={6}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
-                <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} />
-                <YAxis stroke={chart.axis} fontSize={12} width={52} tickLine={false} axisLine={false} />
-                <Tooltip
-                  cursor={{ fill: chart.cursor }}
-                  contentStyle={{
-                    background: chart.tooltipBg,
-                    border: `0.5px solid ${chart.tooltipBorder}`,
-                    borderRadius: 8,
-                    fontSize: 12,
-                    color: chart.tooltipText,
-                  }}
-                  labelStyle={{ color: chart.tooltipText }}
-                  formatter={(v) => formatMoney(Number(v))}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="income" name="Income" fill="#1d9e75" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expense" name="Expense" fill="#d4537e" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
+              <Card>
+                <div className="card-title">Recent expenses</div>
+                {recent.length === 0 ? (
+                  <Empty>No expenses yet.</Empty>
+                ) : (
+                  recent.map((e) => (
+                    <div className="txn" key={e.id}>
+                      <div
+                        className="txn-icon"
+                        style={{ background: (e.cat?.color ?? '#888780') + '22' }}
+                      >
+                        <span
+                          className="pill-dot"
+                          style={{ background: e.cat?.color ?? '#888780' }}
+                        />
+                      </div>
+                      <div className="txn-info">
+                        <div className="txn-name">{e.note || e.cat?.name || 'Expense'}</div>
+                        <div className="txn-cat">
+                          {e.cat?.name ?? 'Unknown'} · {e.date}
+                        </div>
+                      </div>
+                      <div className="txn-amt negative">−{formatMoney(e.amount, e.currency)}</div>
+                    </div>
+                  ))
+                )}
+              </Card>
+            </div>
+          )}
+
+          {(hasIncome || hasExpenses) && (
+            <Card>
+              <div className="card-title">Income vs Expense (last 6 months)</div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={monthly} barGap={6}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                  <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} />
+                  <YAxis stroke={chart.axis} fontSize={12} width={52} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    cursor={{ fill: chart.cursor }}
+                    contentStyle={{
+                      background: chart.tooltipBg,
+                      border: `0.5px solid ${chart.tooltipBorder}`,
+                      borderRadius: 8,
+                      fontSize: 12,
+                      color: chart.tooltipText,
+                    }}
+                    labelStyle={{ color: chart.tooltipText }}
+                    formatter={(v) => formatMoney(Number(v))}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {hasIncome && (
+                    <Bar dataKey="income" name="Income" fill="#1d9e75" radius={[4, 4, 0, 0]} />
+                  )}
+                  {hasExpenses && (
+                    <Bar dataKey="expense" name="Expense" fill="#d4537e" radius={[4, 4, 0, 0]} />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
         </>
       )}
     </>

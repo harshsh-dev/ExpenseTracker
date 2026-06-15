@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"moneytracker/backend/internal/api"
+	"moneytracker/backend/internal/config"
 	"moneytracker/backend/internal/quotes"
 	"moneytracker/backend/internal/store"
 )
@@ -19,19 +20,23 @@ func main() {
 	port := env("PORT", "8080")
 	dataPath := env("DATA_PATH", "data/snapshot.json")
 	origins := strings.Split(env("ALLOWED_ORIGINS", "http://localhost:5173"), ",")
+	feats := config.Parse(env("FEATURES", "all"))
 
 	s, err := store.New(dataPath)
 	if err != nil {
 		log.Fatalf("init store: %v", err)
 	}
 	log.Printf("store ready (snapshot: %s)", dataPath)
+	log.Printf("features enabled: %s", feats)
 
 	q := quotes.New(s)
-	startPriceScheduler(q)
+	if feats.Enabled(config.Investments) {
+		startPriceScheduler(q)
+	}
 
 	srv := &http.Server{
 		Addr:         announceAddr(port),
-		Handler:      api.NewRouter(s, q, origins),
+		Handler:      api.NewRouter(s, q, feats, origins),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,

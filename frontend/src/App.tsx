@@ -12,6 +12,7 @@ import {
 } from '@tabler/icons-react'
 import type { Icon } from '@tabler/icons-react'
 import { useTheme } from './theme'
+import { useFeatures, type Feature } from './features'
 import Dashboard from './modules/Dashboard'
 import IncomePage from './modules/Income'
 import ExpensesPage from './modules/Expenses'
@@ -19,19 +20,21 @@ import InvestmentsPage from './modules/Investments'
 import CategoriesPage from './modules/Categories'
 import SettingsPage from './modules/Settings'
 
-const nav: { to: string; label: string; icon: Icon }[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: IconLayoutDashboard },
-  { to: '/income', label: 'Income', icon: IconCash },
-  { to: '/expenses', label: 'Expenses', icon: IconReceipt },
-  { to: '/investments', label: 'Investments', icon: IconTrendingUp },
-  { to: '/categories', label: 'Categories', icon: IconTag },
-  { to: '/settings', label: 'Backup', icon: IconDeviceFloppy },
+type NavEntry = { to: string; label: string; icon: Icon; feature: Feature; element: React.ReactElement }
+
+const nav: NavEntry[] = [
+  { to: '/dashboard', label: 'Dashboard', icon: IconLayoutDashboard, feature: 'dashboard', element: <Dashboard /> },
+  { to: '/income', label: 'Income', icon: IconCash, feature: 'income', element: <IncomePage /> },
+  { to: '/expenses', label: 'Expenses', icon: IconReceipt, feature: 'expenses', element: <ExpensesPage /> },
+  { to: '/investments', label: 'Investments', icon: IconTrendingUp, feature: 'investments', element: <InvestmentsPage /> },
+  { to: '/categories', label: 'Categories', icon: IconTag, feature: 'categories', element: <CategoriesPage /> },
+  { to: '/settings', label: 'Backup', icon: IconDeviceFloppy, feature: 'backup', element: <SettingsPage /> },
 ]
 
-function NavItems() {
+function NavItems({ items }: { items: NavEntry[] }) {
   return (
     <>
-      {nav.map(({ to, label, icon: Icon }) => (
+      {items.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -57,13 +60,17 @@ function ThemeToggle() {
 }
 
 export default function App() {
+  const features = useFeatures()
+  const items = nav.filter((n) => features.has(n.feature))
+  const home = items[0]?.to ?? '/dashboard'
+
   return (
     <div className="app">
       <aside className="sidebar">
         <div className="logo">
           <IconWallet size={20} stroke={1.75} /> Money Tracker
         </div>
-        <NavItems />
+        <NavItems items={items} />
         <div style={{ marginTop: 'auto' }}>
           <ThemeToggle />
         </div>
@@ -71,18 +78,16 @@ export default function App() {
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <nav className="mobile-nav">
-          <NavItems />
+          <NavItems items={items} />
           <ThemeToggle />
         </nav>
         <main className="main">
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/income" element={<IncomePage />} />
-            <Route path="/expenses" element={<ExpensesPage />} />
-            <Route path="/investments" element={<InvestmentsPage />} />
-            <Route path="/categories" element={<CategoriesPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/" element={<Navigate to={home} replace />} />
+            {items.map((n) => (
+              <Route key={n.to} path={n.to} element={n.element} />
+            ))}
+            <Route path="*" element={<Navigate to={home} replace />} />
           </Routes>
         </main>
       </div>

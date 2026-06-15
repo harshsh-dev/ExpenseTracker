@@ -37,6 +37,11 @@ export interface SymbolHit {
   name: string
 }
 
+export interface AppConfig {
+  app: string
+  features: string[]
+}
+
 export interface RefreshResult {
   investments: Investment[]
   results: { id: string; symbol: string; ok: boolean; price?: number; error?: string }[]
@@ -44,6 +49,7 @@ export interface RefreshResult {
 }
 
 export const api = {
+  getConfig: () => request<AppConfig>('GET', '/api/config'),
   incomes: resource<Income>('/api/incomes'),
   expenses: resource<Expense>('/api/expenses'),
   investments: resource<Investment>('/api/investments'),

@@ -61,23 +61,40 @@ The in-memory database: maps keyed by id, guarded by a `sync.RWMutex`.
 
 ## 4. API (`backend/internal/api`)
 
-- **Router** (`router.go`): chi with RequestID/RealIP/Logger/Recoverer/Timeout + CORS (origins from `ALLOWED_ORIGINS`). Mounts all four resources and the backup endpoints under `/api`, plus `/health`.
+- **Router** (`router.go`): chi with RequestID/RealIP/Logger/Recoverer/Timeout + CORS (origins from `ALLOWED_ORIGINS`). Mounts resources/endpoints **conditionally** based on the enabled feature set (see §4a), plus always-on `/health` and `/api/config`.
 - **Generic CRUD** (`crud.go`): `crud[T]` wires a store's `list/create/update/delete` funcs into REST handlers — one implementation for all resources. On create/update it calls `Validate()` if the payload implements it.
 - **Responses** (`respond.go`): JSON helpers; request bodies decoded with `DisallowUnknownFields`.
 
 ### Endpoints
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET/POST | `/api/{resource}` | list / create |
-| PUT/DELETE | `/api/{resource}/{id}` | update / delete |
-| GET | `/api/backup/export` | download full snapshot |
-| POST | `/api/backup/import` | validate + replace all data |
-| GET | `/health` | liveness |
+| Method | Path | Purpose | Feature |
+|--------|------|---------|---------|
+| GET | `/api/config` | enabled features (`{app, features}`) | always |
+| GET/POST | `/api/{resource}` | list / create | per-resource |
+| PUT/DELETE | `/api/{resource}/{id}` | update / delete | per-resource |
+| POST | `/api/quotes/refresh` | refresh investment prices | `investments` |
+| GET | `/api/quotes/search/{kind}` | symbol search (`mf`/`stock`/`bse`) | `investments` |
+| GET | `/api/backup/export` | download full snapshot | `backup` |
+| POST | `/api/backup/import` | validate + replace all data | `backup` |
+| GET | `/health` | liveness | always |
 
-`resource` ∈ `incomes`, `expenses`, `investments`, `categories`.
+`resource` ∈ `incomes` (`income`), `expenses` (`expenses`), `investments` (`investments`), `categories` (`categories`) — each mounted only when its feature is enabled.
 
 Import validation rejects non-`money-tracker` files and snapshots from a newer `schemaVersion`.
+
+---
+
+## 4a. Feature toggles (`backend/internal/config`)
+
+Deployments can run **full-fledged or trimmed to a subset of features** via the `FEATURES` env var, parsed by `config.Parse`.
+
+- **Features:** `dashboard`, `income`, `expenses`, `investments`, `categories`, `backup`.
+- **Parsing:** `all`/`*`/empty → everything; otherwise a comma/space/semicolon-separated list. Unknown names are ignored with a warning; an empty resolved set falls back to `all` (never ship a blank app).
+- **Dependencies:** `deps` maps a feature to required features and they're enabled transitively (e.g. `expenses` ⇒ `categories`, since expenses are categorized).
+- **Effect:** `NewRouter(s, q, feats, origins)` mounts only enabled routes; `main` only starts the price scheduler when `investments` is on. The resolved list is served at `GET /api/config`.
+- **Frontend coupling:** the SPA fetches `/api/config` at startup (`features.tsx`) and gates navigation, routes, dashboard cards, and data queries off it — so disabled features make no requests. A build-time `VITE_FEATURES` can override this to trim the static frontend independently.
+
+Adding a feature: add the `Feature` const + `all` entry (and any `deps`), guard its routes in `router.go`, and add the matching `Feature` + nav entry on the frontend.
 
 ---
 
@@ -93,7 +110,8 @@ Import validation rejects non-`money-tracker` files and snapshots from a newer `
 ## 6. Frontend (`frontend/src`)
 
 - **`api/client.ts`** — typed `fetch` wrapper; `resource<T>()` factory yields `list/create/update/remove` per resource; plus `exportSnapshot`/`importSnapshot`. Components never call `fetch` directly.
-- **`api/hooks.ts`** — TanStack Query hooks (`useIncomes`, `useIncomeCrud`, …) handling caching + invalidation.
+- **`api/hooks.ts`** — TanStack Query hooks (`useIncomes`, `useIncomeCrud`, …) handling caching + invalidation; list hooks are gated by feature so disabled modules issue no requests.
+- **`features.tsx`** — `FeaturesProvider` fetches `/api/config` once (or honors `VITE_FEATURES`) and exposes `useFeatures()`/`useFeature()`; `App.tsx` filters nav/routes and redirects to the first enabled page.
 - **`modules/`** — one file per page: `Dashboard`, `Income`, `Expenses`, `Investments`, `Categories`, `Settings`. Each owns its list + form (modal).
 - **`components/ui.tsx`** — shared primitives (Card, Button, Field, Input, Select, Modal, Pill, Empty).
 - **`lib/format.ts`** — money/date formatting (the only place values are formatted).

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
+import { useFeature } from '../features'
 import type { Category, Expense, Income, Investment } from '../types'
 
 type Map = {
@@ -9,10 +10,11 @@ type Map = {
   categories: Category
 }
 
-function useList<K extends keyof Map>(key: K) {
+function useList<K extends keyof Map>(key: K, enabled = true) {
   return useQuery({
     queryKey: [key],
     queryFn: () => api[key].list() as Promise<Map[K][]>,
+    enabled,
   })
 }
 
@@ -35,10 +37,10 @@ function useCrud<K extends keyof Map>(key: K) {
   return { create, update, remove }
 }
 
-export const useIncomes = () => useList('incomes')
-export const useExpenses = () => useList('expenses')
-export const useInvestments = () => useList('investments')
-export const useCategories = () => useList('categories')
+export const useIncomes = () => useList('incomes', useFeature('income'))
+export const useExpenses = () => useList('expenses', useFeature('expenses'))
+export const useInvestments = () => useList('investments', useFeature('investments'))
+export const useCategories = () => useList('categories', useFeature('categories'))
 
 export const useIncomeCrud = () => useCrud('incomes')
 export const useExpenseCrud = () => useCrud('expenses')
