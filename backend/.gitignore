@@ -1,0 +1,7 @@
+# runtime data (snapshots are user data, not source)
+/data/*.json
+/data/*.json.tmp
+
+# build output
+/server
+/bin/

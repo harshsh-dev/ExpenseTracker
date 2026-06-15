@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# frontend build output
+frontend/dist/
+
+# backend runtime data (snapshots are user data)
+backend/data/*.json
+backend/data/*.json.tmp
+
+# go build artifacts
+backend/server
+backend/bin/
+
+# env / editor / os
+.env
+.env.local
+.DS_Store
+*.log
