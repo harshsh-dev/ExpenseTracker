@@ -78,7 +78,7 @@ export async function generateReportPdf(
   const pageH = doc.internal.pageSize.getHeight()
   const margin = 40
   const contentW = pageW - margin * 2
-  let y = margin
+  let y = 88
 
   // Header band
   doc.setFillColor(28, 28, 26)
@@ -94,7 +94,6 @@ export async function generateReportPdf(
   doc.setFontSize(9)
   doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, pageW - margin, 32, { align: 'right' })
   doc.text('Money Tracker', pageW - margin, 50, { align: 'right' })
-  y = 88
 
   // Summary rows (only relevant features)
   const summaryRows: string[][] = []

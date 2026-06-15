@@ -1,9 +1,8 @@
-import type { CategorySlice, TrendBucket } from './report'
+import type { TrendBucket } from './report'
 
 const INCOME_COLOR = '#1d9e75'
 const EXPENSE_COLOR = '#d4537e'
 const UNSPENT_COLOR = '#1d9e75'
-const AXIS_COLOR = '#888780'
 const GRID_COLOR = '#e8e8e6'
 const TEXT_COLOR = '#1c1c1a'
 const MUTED_COLOR = '#6f6f6a'
@@ -141,7 +140,9 @@ export function renderTrendBarChart(
 
 type PieSlice = { name: string; value: number; color: string }
 
-function buildPieSlices(income: number, categories: CategorySlice[]): PieSlice[] {
+type PieCategory = { name: string; value: number; color: string }
+
+function buildPieSlices(income: number, categories: PieCategory[]): PieSlice[] {
   const expenseTotal = categories.reduce((s, c) => s + c.value, 0)
   const unspent = Math.max(0, income - expenseTotal)
   const slices = categories.filter((c) => c.value > 0).map((c) => ({
@@ -156,7 +157,7 @@ function buildPieSlices(income: number, categories: CategorySlice[]): PieSlice[]
 // renderAllocationPie draws the income allocation donut + legend as a PNG.
 export function renderAllocationPie(
   income: number,
-  categories: CategorySlice[],
+  categories: PieCategory[],
   opts: { width: number; height: number },
 ): string | null {
   if (income <= 0) return null
