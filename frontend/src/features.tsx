@@ -8,6 +8,7 @@ export type Feature =
   | 'expenses'
   | 'investments'
   | 'categories'
+  | 'report'
   | 'backup'
 
 const ALL_FEATURES: Feature[] = [
@@ -16,6 +17,7 @@ const ALL_FEATURES: Feature[] = [
   'expenses',
   'investments',
   'categories',
+  'report',
   'backup',
 ]
 

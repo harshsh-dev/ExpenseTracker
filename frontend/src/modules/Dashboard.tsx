@@ -13,7 +13,7 @@ import { IconCalendar } from '@tabler/icons-react'
 import { useCategories, useExpenses, useIncomes, useInvestments } from '../api/hooks'
 import { investmentCurrentValue } from '../types'
 import { Card, Empty } from '../components/ui'
-import { formatMoney, monthName } from '../lib/format'
+import { formatMoney, isoDateParts, monthName } from '../lib/format'
 import { useTheme } from '../theme'
 import { useFeatures } from '../features'
 
@@ -60,8 +60,9 @@ export default function Dashboard() {
     }
     for (const i of incomes) touch(i.year, i.month).income += i.amount
     for (const e of expenses) {
-      const d = new Date(e.date)
-      touch(d.getFullYear(), d.getMonth() + 1).expense += e.amount
+      const parts = isoDateParts(e.date)
+      if (!parts) continue
+      touch(parts.year, parts.month).expense += e.amount
     }
     return [...map.values()].sort((a, b) => a.key.localeCompare(b.key)).slice(-6)
   }, [incomes, expenses])
@@ -189,8 +190,9 @@ export default function Dashboard() {
 
           {(hasIncome || hasExpenses) && (
             <Card>
-              <div className="card-title">Income vs Expense (last 6 months)</div>
-              <ResponsiveContainer width="100%" height={280}>
+            <div className="card-title">Income vs Expense (last 6 months)</div>
+            <div style={{ width: '100%', height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthly} barGap={6}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
                   <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} />
@@ -214,9 +216,10 @@ export default function Dashboard() {
                   {hasExpenses && (
                     <Bar dataKey="expense" name="Expense" fill="#d4537e" radius={[4, 4, 0, 0]} />
                   )}
-                </BarChart>
+              </BarChart>
               </ResponsiveContainer>
-            </Card>
+            </div>
+          </Card>
           )}
         </>
       )}

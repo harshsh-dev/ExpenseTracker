@@ -15,6 +15,7 @@ It's a **monorepo**: a **Go** API backend (`backend/`) and a **React + Vite** fr
 | **Investments** | Anytime | Track investments (stocks, MF, FD, gold, crypto, …) with **auto-fetched live prices** → current value, **profit/loss** %, and a portfolio summary. |
 | **Categories** | Anytime | Fully editable taxonomy (name, color, subcategories); seeded with sensible defaults. |
 | **Dashboard** | Live | Income vs expense, net savings + savings rate, portfolio P/L, charts. |
+| **Reports** | Weekly / Monthly / Annual | Pick a period, visualize income vs expense, category breakdown, top expenses & income sources, and **download a PDF**. |
 | **Backup** | Quarterly / anytime | Download a full JSON snapshot; re-upload on any device to restore. |
 
 > **Investments note:** live prices are fetched **server-side, no API keys** — mutual funds via MFAPI.in (AMFI NAV), Indian stocks via **NSE or BSE (spoofed headers) with a Yahoo Finance fallback** (`.NS`/`.BO`), crypto via CoinGecko (in INR). Use the **Refresh prices** button or the periodic auto-refresh; for assets without a feed (FD, gold, real estate) enter current value manually. Symbol search is built in for funds and both exchanges.
@@ -64,8 +65,9 @@ money-tracker/
 │   └── src/
 │       ├── api/                  # fetch client + React Query hooks
 │       ├── components/           # shared UI primitives
-│       ├── lib/                  # formatting helpers
-│       ├── modules/              # Dashboard, Income, Expenses, Investments, Categories, Settings
+│       ├── lib/                  # formatting, report aggregation, PDF generation
+│       ├── features.tsx          # feature-flag context (reads /api/config)
+│       ├── modules/              # Dashboard, Income, Expenses, Investments, Reports, Categories, Settings
 │       └── types.ts              # types mirroring the Go domain
 ├── docs/                         # ARCHITECTURE.md, PROJECT_PLAN.md
 ├── CLAUDE.md
@@ -98,7 +100,7 @@ Open http://localhost:5173. The Vite dev server proxies API calls to the backend
 | `PORT` | `8080` | Listen port |
 | `DATA_PATH` | `data/snapshot.json` | Snapshot file location |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated CORS origins (set to your frontend URL in prod) |
-| `FEATURES` | `all` | Which features to enable, comma-separated (`income,expenses,investments,categories,dashboard,backup`). `all`/empty = full app. See [§7](#7-feature-wise-deployment). |
+| `FEATURES` | `all` | Which features to enable, comma-separated (`income,expenses,investments,categories,dashboard,report,backup`). `all`/empty = full app. See [§7](#7-feature-wise-deployment). |
 | `QUOTES_REFRESH` | `on` | Set `off` to disable the periodic price auto-refresh |
 | `QUOTES_REFRESH_INTERVAL` | `12h` | How often prices auto-refresh (Go duration) |
 
@@ -127,7 +129,7 @@ docker run -p 8080:8080 -v $PWD/data:/app/data money-tracker-api
 
 The app is **modular**: each capability is a toggleable **feature**, so the same codebase can ship full-fledged or trimmed to a subset. The backend's `FEATURES` env var is the single source of truth — it decides which **API routes** are mounted and advertises the resolved set at **`GET /api/config`**, which the frontend reads to show only the relevant **navigation, pages, and dashboard cards**.
 
-**Features:** `dashboard`, `income`, `expenses`, `investments`, `categories`, `backup`.
+**Features:** `dashboard`, `income`, `expenses`, `investments`, `categories`, `report`, `backup`.
 
 ```bash
 # Full app (default)

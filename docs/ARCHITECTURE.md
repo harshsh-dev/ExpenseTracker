@@ -88,7 +88,7 @@ Import validation rejects non-`money-tracker` files and snapshots from a newer `
 
 Deployments can run **full-fledged or trimmed to a subset of features** via the `FEATURES` env var, parsed by `config.Parse`.
 
-- **Features:** `dashboard`, `income`, `expenses`, `investments`, `categories`, `backup`.
+- **Features:** `dashboard`, `income`, `expenses`, `investments`, `categories`, `report`, `backup`. (`dashboard` and `report` are frontend-computed — they aggregate the other features' data and mount no backend routes.)
 - **Parsing:** `all`/`*`/empty → everything; otherwise a comma/space/semicolon-separated list. Unknown names are ignored with a warning; an empty resolved set falls back to `all` (never ship a blank app).
 - **Dependencies:** `deps` maps a feature to required features and they're enabled transitively (e.g. `expenses` ⇒ `categories`, since expenses are categorized).
 - **Effect:** `NewRouter(s, q, feats, origins)` mounts only enabled routes; `main` only starts the price scheduler when `investments` is on. The resolved list is served at `GET /api/config`.
@@ -112,7 +112,8 @@ Adding a feature: add the `Feature` const + `all` entry (and any `deps`), guard 
 - **`api/client.ts`** — typed `fetch` wrapper; `resource<T>()` factory yields `list/create/update/remove` per resource; plus `exportSnapshot`/`importSnapshot`. Components never call `fetch` directly.
 - **`api/hooks.ts`** — TanStack Query hooks (`useIncomes`, `useIncomeCrud`, …) handling caching + invalidation; list hooks are gated by feature so disabled modules issue no requests.
 - **`features.tsx`** — `FeaturesProvider` fetches `/api/config` once (or honors `VITE_FEATURES`) and exposes `useFeatures()`/`useFeature()`; `App.tsx` filters nav/routes and redirects to the first enabled page.
-- **`modules/`** — one file per page: `Dashboard`, `Income`, `Expenses`, `Investments`, `Categories`, `Settings`. Each owns its list + form (modal).
+- **`modules/`** — one file per page: `Dashboard`, `Income`, `Expenses`, `Investments`, `Reports`, `Categories`, `Settings`. Each owns its list + form (modal).
+- **`lib/report.ts`** — pure aggregation: `rangeFor`/`shift` (weekly/monthly/annual windows) and `buildReport` (totals, category & source breakdowns, top expenses, trend buckets; income is prorated per-day so weekly windows are meaningful). **`lib/pdf.ts`** — `generateReportPdf` (jsPDF + autotable) builds the downloadable PDF and rasterizes the on-screen chart SVG to PNG; lazy-imported so jsPDF stays out of the initial bundle.
 - **`components/ui.tsx`** — shared primitives (Card, Button, Field, Input, Select, Modal, Pill, Empty).
 - **`lib/format.ts`** — money/date formatting (the only place values are formatted).
 - **`types.ts`** — TS mirror of the Go domain + derived helpers (`investmentCurrentValue`, `investmentPnl`).

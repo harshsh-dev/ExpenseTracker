@@ -39,3 +39,10 @@ export function monthName(m: number): string {
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
+
+// isoDateParts parses YYYY-MM-DD without timezone shifts (unlike new Date(iso)).
+export function isoDateParts(iso: string): { year: number; month: number; day: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return null
+  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) }
+}
