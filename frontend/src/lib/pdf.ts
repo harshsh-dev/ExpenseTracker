@@ -1,11 +1,18 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { renderAllocationPie, renderTrendBarChart } from './pdf-charts'
 import type { ReportData } from './report'
 
 const PERIOD_LABEL: Record<ReportData['period'], string> = {
   weekly: 'Weekly',
   monthly: 'Monthly',
   annual: 'Annual',
+}
+
+export type PdfFeatures = {
+  income?: boolean
+  expenses?: boolean
+  investments?: boolean
 }
 
 // Standard PDF fonts can't render the ₹ glyph, so use the ASCII currency code.
@@ -26,44 +33,46 @@ function finalY(doc: jsPDF): number {
   return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
 }
 
-// svgToPng rasterizes a (Recharts) SVG node to a PNG data URL on a white canvas.
-async function svgToPng(
-  svg: SVGElement,
-  scale = 2,
-): Promise<{ dataUrl: string; width: number; height: number }> {
-  const rect = svg.getBoundingClientRect()
-  const width = Math.max(1, rect.width || 600)
-  const height = Math.max(1, rect.height || 280)
-  const clone = svg.cloneNode(true) as SVGElement
-  clone.setAttribute('width', String(width))
-  clone.setAttribute('height', String(height))
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-  const xml = new XMLSerializer().serializeToString(clone)
-  const src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)))
+function ensureSpace(doc: jsPDF, y: number, needed: number, margin: number): number {
+  const pageH = doc.internal.pageSize.getHeight()
+  if (y + needed > pageH - margin) {
+    doc.addPage()
+    return margin
+  }
+  return y
+}
 
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = width * scale
-      canvas.height = height * scale
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return reject(new Error('no canvas context'))
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      resolve({ dataUrl: canvas.toDataURL('image/png'), width, height })
-    }
-    img.onerror = () => reject(new Error('svg render failed'))
-    img.src = src
-  })
+function sectionTitle(doc: jsPDF, y: number, title: string, margin: number): number {
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(20, 20, 20)
+  doc.text(title, margin, y)
+  return y + 14
+}
+
+function addChartImage(
+  doc: jsPDF,
+  dataUrl: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  doc.addImage(dataUrl, 'PNG', x, y, w, h)
 }
 
 export async function generateReportPdf(
   data: ReportData,
-  opts: { chartSvg?: SVGElement | null; currency?: string } = {},
+  opts: { currency?: string; features?: PdfFeatures } = {},
 ): Promise<void> {
   const currency = opts.currency ?? 'INR'
+  const feats: PdfFeatures = {
+    income: true,
+    expenses: true,
+    investments: true,
+    ...opts.features,
+  }
+
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -71,66 +80,124 @@ export async function generateReportPdf(
   const contentW = pageW - margin * 2
   let y = margin
 
-  // Header
+  // Header band
+  doc.setFillColor(28, 28, 26)
+  doc.rect(0, 0, pageW, 72, 'F')
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(18)
-  doc.setTextColor(20, 20, 20)
-  doc.text(`${PERIOD_LABEL[data.period]} Report`, margin, y + 4)
+  doc.setTextColor(255, 255, 255)
+  doc.text(`${PERIOD_LABEL[data.period]} Report`, margin, 32)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(11)
-  doc.setTextColor(110, 110, 110)
-  doc.text(data.range.label, margin, y + 22)
+  doc.setTextColor(200, 200, 198)
+  doc.text(data.range.label, margin, 50)
   doc.setFontSize(9)
-  doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, pageW - margin, y + 4, {
-    align: 'right',
-  })
-  y += 40
+  doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, pageW - margin, 32, { align: 'right' })
+  doc.text('Money Tracker', pageW - margin, 50, { align: 'right' })
+  y = 88
 
-  // Summary
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Summary', '']],
-    body: [
-      ['Total income', money(data.income, currency)],
-      ['Total expenses', money(data.expense, currency)],
-      ['Net savings', money(data.net, currency)],
-      ['Savings rate', `${data.savingsRate.toFixed(1)}%`],
-      ['Invested this period', `${money(data.investedInPeriod, currency)} (${data.investedCount})`],
-      ['Portfolio value', money(data.portfolioValue, currency)],
-      ['Portfolio P/L', money(data.portfolioPnl, currency)],
-    ],
-    theme: 'plain',
-    headStyles: { fontStyle: 'bold', fontSize: 12, textColor: [20, 20, 20] },
-    bodyStyles: { fontSize: 10, textColor: [50, 50, 50] },
-    columnStyles: { 1: { halign: 'right' } },
-  })
-  y = finalY(doc) + 18
+  // Summary rows (only relevant features)
+  const summaryRows: string[][] = []
+  if (feats.income) summaryRows.push(['Total income', money(data.income, currency)])
+  if (feats.expenses) summaryRows.push(['Total expenses', money(data.expense, currency)])
+  if (feats.income && feats.expenses) {
+    summaryRows.push(['Net savings', money(data.net, currency)])
+    summaryRows.push(['Savings rate', `${data.savingsRate.toFixed(1)}%`])
+  }
+  if (feats.investments && (data.investedInPeriod > 0 || data.investedCount > 0)) {
+    summaryRows.push([
+      'Invested this period',
+      `${money(data.investedInPeriod, currency)} (${data.investedCount})`,
+    ])
+  }
+  if (feats.investments && data.portfolioValue > 0) {
+    summaryRows.push(['Portfolio value', money(data.portfolioValue, currency)])
+    summaryRows.push(['Portfolio P/L', money(data.portfolioPnl, currency)])
+  }
 
-  // Trend chart (best-effort: skip if rasterization fails)
-  if (opts.chartSvg) {
-    try {
-      const png = await svgToPng(opts.chartSvg)
-      const imgW = contentW
-      const imgH = (png.height / png.width) * imgW
-      if (y + imgH > pageH - margin) {
-        doc.addPage()
-        y = margin
-      }
+  if (summaryRows.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [['Summary', 'Amount']],
+      body: summaryRows,
+      theme: 'striped',
+      headStyles: { fillColor: [28, 28, 26], fontSize: 10, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10, textColor: [50, 50, 50] },
+      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+      alternateRowStyles: { fillColor: [248, 248, 246] },
+    })
+    y = finalY(doc) + 20
+  }
+
+  // Charts section
+  const showBar = feats.income || feats.expenses
+  const showPie = feats.income && data.income > 0
+  const barPng = showBar
+    ? renderTrendBarChart(data.trend, {
+        width: Math.round(contentW * 2),
+        height: 440,
+        showIncome: !!feats.income,
+        showExpense: !!feats.expenses,
+      })
+    : null
+  const piePng = showPie
+    ? renderAllocationPie(
+        data.income,
+        data.byCategory.map((c) => ({ name: c.name, value: c.value, color: c.color })),
+        { width: Math.round(contentW * 2), height: 520 },
+      )
+    : null
+
+  if (barPng || piePng) {
+    y = ensureSpace(doc, y, 40, margin)
+    y = sectionTitle(doc, y, 'Visualizations', margin)
+
+    if (barPng && piePng) {
+      const gap = 16
+      const halfW = (contentW - gap) / 2
+      const barH = 200
+      const pieH = 240
+      const rowH = Math.max(barH, pieH) + 8
+      y = ensureSpace(doc, y, rowH, margin)
+
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(11)
-      doc.setTextColor(20, 20, 20)
-      doc.text('Income vs Expense', margin, y)
-      y += 10
-      doc.addImage(png.dataUrl, 'PNG', margin, y, imgW, imgH)
-      y += imgH + 18
-    } catch {
-      /* chart is optional; tables still render */
+      doc.setFontSize(10)
+      doc.setTextColor(80, 80, 78)
+      doc.text('Income vs Expense (trend)', margin, y)
+      doc.text('Income allocation', margin + halfW + gap, y)
+      y += 8
+
+      addChartImage(doc, barPng, margin, y, halfW, barH)
+      addChartImage(doc, piePng, margin + halfW + gap, y, halfW, pieH)
+      y += rowH + 12
+    } else if (barPng) {
+      const barH = 210
+      y = ensureSpace(doc, y, barH + 20, margin)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(80, 80, 78)
+      doc.text('Income vs Expense (trend)', margin, y)
+      y += 8
+      addChartImage(doc, barPng, margin, y, contentW, barH)
+      y += barH + 16
+    } else if (piePng) {
+      const pieH = 260
+      y = ensureSpace(doc, y, pieH + 20, margin)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(80, 80, 78)
+      doc.text('Income allocation', margin, y)
+      y += 8
+      addChartImage(doc, piePng, margin, y, contentW * 0.65, pieH)
+      y += pieH + 16
     }
   }
 
   // Spending by category
-  if (data.byCategory.length > 0) {
+  if (feats.expenses && data.byCategory.length > 0) {
+    y = ensureSpace(doc, y, 60, margin)
+    y = sectionTitle(doc, y, 'Spending by category', margin)
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
@@ -144,37 +211,59 @@ export async function generateReportPdf(
       headStyles: { fillColor: [28, 28, 26], fontSize: 10 },
       bodyStyles: { fontSize: 9 },
       columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
+      alternateRowStyles: { fillColor: [248, 248, 246] },
     })
     y = finalY(doc) + 16
   }
 
   // Top expenses
-  if (data.topExpenses.length > 0) {
+  if (feats.expenses && data.topExpenses.length > 0) {
+    y = ensureSpace(doc, y, 60, margin)
+    y = sectionTitle(doc, y, 'Top expenses', margin)
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
       head: [['Date', 'Category', 'Note', 'Amount']],
-      body: data.topExpenses.map((e) => [e.date, e.category, e.note || '—', money(e.amount, currency)]),
+      body: data.topExpenses.map((e) => [
+        e.date,
+        e.category,
+        e.note || '—',
+        money(e.amount, currency),
+      ]),
       theme: 'striped',
       headStyles: { fillColor: [28, 28, 26], fontSize: 10 },
       bodyStyles: { fontSize: 9 },
       columnStyles: { 3: { halign: 'right' } },
+      alternateRowStyles: { fillColor: [248, 248, 246] },
     })
     y = finalY(doc) + 16
   }
 
   // Income sources
-  if (data.sources.length > 0) {
+  if (feats.income && data.sources.length > 0) {
+    y = ensureSpace(doc, y, 60, margin)
+    y = sectionTitle(doc, y, 'Income sources', margin)
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
-      head: [['Income source', 'Amount']],
+      head: [['Source', 'Amount']],
       body: data.sources.map((s) => [s.source, money(s.value, currency)]),
       theme: 'striped',
       headStyles: { fillColor: [28, 28, 26], fontSize: 10 },
       bodyStyles: { fontSize: 9 },
       columnStyles: { 1: { halign: 'right' } },
+      alternateRowStyles: { fillColor: [248, 248, 246] },
     })
+  }
+
+  // Page numbers
+  const pages = doc.getNumberOfPages()
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(160, 160, 158)
+    doc.text(`Page ${p} of ${pages}`, pageW / 2, pageH - 20, { align: 'center' })
   }
 
   const stamp = data.range.label.replace(/[^\w]+/g, '-').toLowerCase()

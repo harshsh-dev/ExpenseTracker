@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -54,7 +54,6 @@ export default function ReportsPage() {
   const [period, setPeriod] = useState<ReportPeriod>('monthly')
   const [anchor, setAnchor] = useState(() => new Date())
   const [busy, setBusy] = useState(false)
-  const chartRef = useRef<HTMLDivElement>(null)
 
   const report = useMemo(
     () => buildReport({ period, anchor, incomes, expenses, investments, categories }),
@@ -62,12 +61,12 @@ export default function ReportsPage() {
   )
 
   async function downloadPdf() {
-    const svg = chartRef.current?.querySelector('svg') as SVGElement | null
     setBusy(true)
     try {
-      // Lazy-loaded so jsPDF stays out of the initial bundle.
       const { generateReportPdf } = await import('../lib/pdf')
-      await generateReportPdf(report, { chartSvg: svg })
+      await generateReportPdf(report, {
+        features: { income: hasIncome, expenses: hasExpenses, investments: hasInvestments },
+      })
     } finally {
       setBusy(false)
     }
@@ -169,7 +168,7 @@ export default function ReportsPage() {
             <div className="grid gap-5 lg:grid-cols-2">
               <Card>
                 <div className="card-title">Income vs Expense (trend)</div>
-                <div ref={chartRef} style={{ width: '100%', height: 280 }}>
+                <div style={{ width: '100%', height: 280 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={report.trend} barGap={6}>
                       <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
