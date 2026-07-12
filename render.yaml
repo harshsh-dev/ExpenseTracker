@@ -20,9 +20,9 @@ services:
       - key: FEATURES
         value: all
       - key: ALLOWED_ORIGINS
-        value: https://expense-tracker-2577a.web.app,https://expense-tracker-2577a.firebaseapp.com
+        value: https://expense.theharshsharma.in,https://expense-tracker-2577a.web.app,https://expense-tracker-2577a.firebaseapp.com
       - key: FRONTEND_URL
-        value: https://expense-tracker-2577a.web.app
+        value: https://expense.theharshsharma.in
       # Hosting and the API are on different domains, so session cookies need
       # SameSite=None; Secure.
       - key: CROSS_SITE_COOKIES
