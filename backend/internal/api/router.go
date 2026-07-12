@@ -33,8 +33,11 @@ func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowed
 		AllowedOrigins: allowedOrigins,
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{"Accept", "Content-Type"},
-		// Session cookies must survive cross-origin requests when auth is on.
-		AllowCredentials: a.Enabled(),
+		// Always allow credentials: the SPA sends every request with
+		// credentials included (session cookie), and browsers reject
+		// credentialed responses that lack this header — even when auth is
+		// off. Safe because origins are an explicit allowlist, never "*".
+		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
