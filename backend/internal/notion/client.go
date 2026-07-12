@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -277,6 +278,103 @@ func (c *Client) ExistingRows(ctx context.Context, databaseID string) (map[strin
 			if rt := p.Properties.AppID.RichText; len(rt) > 0 {
 				rows[rt[0].PlainText] = p.ID
 			}
+		}
+		if !res.HasMore {
+			return rows, nil
+		}
+		cursor = res.NextCursor
+	}
+}
+
+// ---- reading rows back (Notion → app pull) ----
+
+// PropValue decodes any of the property types the sync uses.
+type PropValue struct {
+	Type     string     `json:"type"`
+	Title    []textSpan `json:"title"`
+	RichText []textSpan `json:"rich_text"`
+	Number   *float64   `json:"number"`
+	Select   *selectVal `json:"select"`
+	Date     *dateVal   `json:"date"`
+}
+
+type textSpan struct {
+	PlainText string `json:"plain_text"`
+}
+type selectVal struct {
+	Name string `json:"name"`
+}
+type dateVal struct {
+	Start string `json:"start"`
+}
+
+func (p PropValue) Text() string {
+	var b []byte
+	for _, s := range p.Title {
+		b = append(b, s.PlainText...)
+	}
+	for _, s := range p.RichText {
+		b = append(b, s.PlainText...)
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func (p PropValue) Num() float64 {
+	if p.Number == nil {
+		return 0
+	}
+	return *p.Number
+}
+
+func (p PropValue) Sel() string {
+	if p.Select == nil {
+		return ""
+	}
+	return p.Select.Name
+}
+
+// DateStr returns the ISO date (YYYY-MM-DD), dropping any time component.
+func (p PropValue) DateStr() string {
+	if p.Date == nil {
+		return ""
+	}
+	s := p.Date.Start
+	if len(s) > 10 {
+		s = s[:10]
+	}
+	return s
+}
+
+// Row is one database row with its edit timestamp, for reconciliation.
+type Row struct {
+	PageID     string
+	LastEdited time.Time
+	Props      map[string]PropValue
+}
+
+// QueryRows fetches all rows of a database with decoded properties.
+func (c *Client) QueryRows(ctx context.Context, databaseID string) ([]Row, error) {
+	var rows []Row
+	var cursor string
+	for {
+		body := map[string]any{"page_size": 100}
+		if cursor != "" {
+			body["start_cursor"] = cursor
+		}
+		var res struct {
+			Results []struct {
+				ID             string               `json:"id"`
+				LastEditedTime time.Time            `json:"last_edited_time"`
+				Properties     map[string]PropValue `json:"properties"`
+			} `json:"results"`
+			HasMore    bool   `json:"has_more"`
+			NextCursor string `json:"next_cursor"`
+		}
+		if err := c.do(ctx, http.MethodPost, "/databases/"+databaseID+"/query", body, &res); err != nil {
+			return nil, err
+		}
+		for _, p := range res.Results {
+			rows = append(rows, Row{PageID: p.ID, LastEdited: p.LastEditedTime, Props: p.Properties})
 		}
 		if !res.HasMore {
 			return rows, nil

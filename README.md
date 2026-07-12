@@ -141,6 +141,11 @@ Either way: **Backup page → Notion sync → Sync to Notion.** Re-syncs upsert
 (no duplicates); rows are matched by the hidden `App ID` column. Large
 datasets take a few minutes (Notion allows ~3 requests/sec).
 
+**Pull from Notion** imports the other way: rows added in Notion (no App ID)
+are created in the app, rows edited in Notion win when their edit is newer,
+invalid rows are skipped with a report, and deletions never propagate in
+either direction. Unknown category names are auto-created.
+
 ---
 
 ## 6. Deploy

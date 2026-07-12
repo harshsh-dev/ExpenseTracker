@@ -46,6 +46,7 @@ func notionStatusHandler(a *auth.Service, y *notion.Syncer) http.HandlerFunc {
 			"running":       st.Running,
 			"lastSyncedAt":  st.LastSyncedAt,
 			"last":          st.Last,
+			"lastPull":      st.LastPull,
 		})
 	}
 }
@@ -61,5 +62,19 @@ func notionSyncHandler(a *auth.Service, y *notion.Syncer) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "sync started"})
+	}
+}
+
+func notionPullHandler(a *auth.Service, y *notion.Syncer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.Enabled() {
+			writeError(w, http.StatusBadRequest, "Notion login is not configured on this server")
+			return
+		}
+		if err := y.StartPull(auth.UserID(r.Context())); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "pull started"})
 	}
 }

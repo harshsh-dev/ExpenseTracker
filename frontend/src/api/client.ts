@@ -91,6 +91,17 @@ export interface NotionSyncResult {
   investments: number
 }
 
+export interface NotionPullResult {
+  startedAt: string
+  finishedAt: string
+  error?: string
+  created: number
+  updated: number
+  unchanged: number
+  skipped: number
+  skipReasons?: string[]
+}
+
 export interface NotionStatus {
   configured: boolean
   connected?: boolean
@@ -99,6 +110,7 @@ export interface NotionStatus {
   running?: boolean
   lastSyncedAt?: string
   last?: NotionSyncResult
+  lastPull?: NotionPullResult
 }
 
 // Full-page navigation target for "Continue with Notion" (OAuth redirect).
@@ -116,6 +128,7 @@ export const api = {
   },
   notionStatus: () => request<NotionStatus>('GET', '/api/notion/status'),
   notionSync: () => request<{ status: string }>('POST', '/api/notion/sync'),
+  notionPull: () => request<{ status: string }>('POST', '/api/notion/pull'),
   getConfig: () => request<AppConfig>('GET', '/api/config'),
   incomes: resource<Income>('/api/incomes'),
   expenses: resource<Expense>('/api/expenses'),

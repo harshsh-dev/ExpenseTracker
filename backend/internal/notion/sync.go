@@ -44,9 +44,10 @@ type Syncer struct {
 	accounts *auth.Accounts
 	envToken string
 
-	mu      sync.Mutex
-	running bool
-	last    *Result
+	mu       sync.Mutex
+	running  bool
+	last     *Result
+	lastPull *PullResult
 }
 
 const internalUserID = "internal"
@@ -76,17 +77,18 @@ func (y *Syncer) resolve(userID string) (auth.Account, string, error) {
 
 // Status is the JSON shape the frontend polls.
 type Status struct {
-	Connected     bool       `json:"connected"`
-	WorkspaceName string     `json:"workspaceName,omitempty"`
-	PageURL       string     `json:"pageUrl,omitempty"`
-	Running       bool       `json:"running"`
-	LastSyncedAt  *time.Time `json:"lastSyncedAt,omitempty"`
-	Last          *Result    `json:"last,omitempty"`
+	Connected     bool        `json:"connected"`
+	WorkspaceName string      `json:"workspaceName,omitempty"`
+	PageURL       string      `json:"pageUrl,omitempty"`
+	Running       bool        `json:"running"`
+	LastSyncedAt  *time.Time  `json:"lastSyncedAt,omitempty"`
+	Last          *Result     `json:"last,omitempty"`
+	LastPull      *PullResult `json:"lastPull,omitempty"`
 }
 
 func (y *Syncer) Status(userID string) Status {
 	y.mu.Lock()
-	st := Status{Running: y.running, Last: y.last}
+	st := Status{Running: y.running, Last: y.last, LastPull: y.lastPull}
 	y.mu.Unlock()
 	lookup := userID
 	if y.envToken != "" {

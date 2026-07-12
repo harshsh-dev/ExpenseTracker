@@ -72,7 +72,7 @@ npm run lint                           # eslint
 
 `GET/POST /api/{incomes|expenses|investments|categories}`, `PUT/DELETE /api/{resource}/{id}`, `GET /api/backup/export`, `POST /api/backup/import`, `GET /health`.
 
-Auth (active when `NOTION_CLIENT_ID/SECRET` **or** `APP_PASSWORD` set; then all routes except `/health`, `/api/config`, `/api/auth/*` require a session cookie): `GET /api/auth/notion/{login|callback}`, `POST /api/auth/login` (password mode), `GET /api/auth/me`, `POST /api/auth/logout`. Notion sync (token from OAuth login or `NOTION_TOKEN`): `GET /api/notion/status`, `POST /api/notion/sync`.
+Auth (active when `NOTION_CLIENT_ID/SECRET` **or** `APP_PASSWORD` set; then all routes except `/health`, `/api/config`, `/api/auth/*` require a session cookie): `GET /api/auth/notion/{login|callback}`, `POST /api/auth/login` (password mode), `GET /api/auth/me`, `POST /api/auth/logout`. Notion sync (token from OAuth login or `NOTION_TOKEN`): `GET /api/notion/status`, `POST /api/notion/sync` (push), `POST /api/notion/pull` (import Notion edits/additions; deletions never propagate).
 
 ## Workflow expectations
 

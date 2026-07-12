@@ -1,6 +1,12 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { IconBrandNotion, IconDownload, IconExternalLink, IconUpload } from '@tabler/icons-react'
+import {
+  IconBrandNotion,
+  IconCloudDownload,
+  IconDownload,
+  IconExternalLink,
+  IconUpload,
+} from '@tabler/icons-react'
 import { api } from '../api/client'
 import { useAuth } from '../auth'
 import type { Snapshot } from '../types'
@@ -112,6 +118,7 @@ export default function SettingsPage() {
 // signed-in user's Notion workspace. Runs server-side; we poll while it runs.
 function NotionSyncCard() {
   const { enabled } = useAuth()
+  const qc = useQueryClient()
   const [err, setErr] = useState<string | null>(null)
 
   const { data: status, refetch } = useQuery({
@@ -121,12 +128,24 @@ function NotionSyncCard() {
     refetchInterval: (query) => (query.state.data?.running ? 2000 : false),
   })
 
+  // A finished pull may have changed app data; refresh the other pages.
+  const pullStamp = status?.lastPull?.finishedAt
+  const pullChanged = (status?.lastPull?.created ?? 0) + (status?.lastPull?.updated ?? 0) > 0
+  useEffect(() => {
+    if (pullStamp && pullChanged) {
+      void qc.invalidateQueries({ queryKey: ['expenses'] })
+      void qc.invalidateQueries({ queryKey: ['incomes'] })
+      void qc.invalidateQueries({ queryKey: ['investments'] })
+      void qc.invalidateQueries({ queryKey: ['categories'] })
+    }
+  }, [pullStamp, pullChanged, qc])
+
   if (!enabled) return null
 
-  async function handleSync() {
+  async function run(op: () => Promise<{ status: string }>) {
     setErr(null)
     try {
-      await api.notionSync()
+      await op()
       await refetch()
     } catch (e) {
       setErr((e as Error).message)
@@ -134,6 +153,7 @@ function NotionSyncCard() {
   }
 
   const last = status?.last
+  const lastPull = status?.lastPull
   const running = status?.running ?? false
 
   return (
@@ -144,13 +164,16 @@ function NotionSyncCard() {
       </div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
         Mirror expenses, income, and investments to databases in your Notion
-        workspace{status?.workspaceName ? ` (${status.workspaceName})` : ''}. One-way:
-        the app stays the source of truth.
+        workspace{status?.workspaceName ? ` (${status.workspaceName})` : ''}. Pull brings
+        rows added or edited in Notion back into the app (deletions never cross over).
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button onClick={() => void handleSync()} disabled={running}>
+        <Button onClick={() => void run(api.notionSync)} disabled={running}>
           <IconBrandNotion size={15} stroke={1.75} />
-          {running ? 'Syncing…' : 'Sync to Notion'}
+          {running ? 'Working…' : 'Sync to Notion'}
+        </Button>
+        <Button variant="ghost" onClick={() => void run(api.notionPull)} disabled={running}>
+          <IconCloudDownload size={15} stroke={1.75} /> Pull from Notion
         </Button>
         {status?.pageUrl && (
           <a className="btn btn-ghost" href={status.pageUrl} target="_blank" rel="noreferrer">
@@ -160,7 +183,7 @@ function NotionSyncCard() {
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
         {running
-          ? 'Sync in progress — large datasets take a few minutes (Notion rate limits).'
+          ? 'Working — large datasets take a few minutes (Notion rate limits).'
           : err
             ? err
             : last?.error
@@ -170,6 +193,17 @@ function NotionSyncCard() {
                   (last ? ` — ${last.created} created, ${last.updated} updated.` : '.')
                 : 'Never synced yet.'}
       </p>
+      {lastPull && !running && (
+        <p className="muted" style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+          {lastPull.error
+            ? `Last pull failed: ${lastPull.error}`
+            : `Last pull: ${lastPull.created} added, ${lastPull.updated} updated, ` +
+              `${lastPull.unchanged} unchanged, ${lastPull.skipped} skipped.`}
+          {!!lastPull.skipReasons?.length && (
+            <span> ({lastPull.skipReasons.join('; ')})</span>
+          )}
+        </p>
+      )}
     </Card>
   )
 }

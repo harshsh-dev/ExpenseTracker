@@ -108,6 +108,7 @@ func mountResources(r chi.Router, s *store.Store, q *quotes.Service, feats confi
 	r.Route("/notion", func(r chi.Router) {
 		r.Get("/status", notionStatusHandler(a, y))
 		r.Post("/sync", notionSyncHandler(a, y))
+		r.Post("/pull", notionPullHandler(a, y))
 	})
 }
 
