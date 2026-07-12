@@ -40,12 +40,13 @@ func main() {
 		ClientSecret: env("NOTION_CLIENT_SECRET", ""),
 		// Default assumes the Vite dev proxy so the session cookie lands
 		// on the frontend origin; set explicitly in production.
-		RedirectURI:   env("NOTION_REDIRECT_URI", "http://localhost:5173/api/auth/notion/callback"),
-		AppPassword:   env("APP_PASSWORD", ""),
-		FrontendURL:   env("FRONTEND_URL", "/"),
-		SessionSecret: env("SESSION_SECRET", ""),
-		AllowedEmails: strings.Split(env("ALLOWED_NOTION_EMAILS", ""), ","),
-		CrossSite:     env("CROSS_SITE_COOKIES", "off") == "on",
+		RedirectURI:     env("NOTION_REDIRECT_URI", "http://localhost:5173/api/auth/notion/callback"),
+		AppPassword:     env("APP_PASSWORD", ""),
+		AppPasswordHash: env("APP_PASSWORD_HASH", ""),
+		FrontendURL:     env("FRONTEND_URL", "/"),
+		SessionSecret:   env("SESSION_SECRET", ""),
+		AllowedEmails:   strings.Split(env("ALLOWED_NOTION_EMAILS", ""), ","),
+		CrossSite:       env("CROSS_SITE_COOKIES", "off") == "on",
 	}
 	a, err := auth.New(authCfg, authBlob)
 	if err != nil {

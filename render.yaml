@@ -34,7 +34,8 @@ services:
       # read/write data.
       #
       # Simple mode: shared app password + internal-integration token for sync.
-      - key: APP_PASSWORD
+      # Set the bcrypt hash (go run ./cmd/hashpw '<password>'), not the password.
+      - key: APP_PASSWORD_HASH
         sync: false
       - key: NOTION_TOKEN
         sync: false

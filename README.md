@@ -106,7 +106,8 @@ Open http://localhost:5173. The Vite dev server proxies API calls to the backend
 | `FEATURES` | `all` | Which features to enable, comma-separated (`income,expenses,investments,categories,dashboard,report,backup`). `all`/empty = full app. See [§7](#7-feature-wise-deployment). |
 | `QUOTES_REFRESH` | `on` | Set `off` to disable the periodic price auto-refresh |
 | `QUOTES_REFRESH_INTERVAL` | `12h` | How often prices auto-refresh (Go duration) |
-| `APP_PASSWORD` | _(unset)_ | Enables **password login** (single shared password) — the simple alternative to Notion OAuth |
+| `APP_PASSWORD_HASH` | _(unset)_ | Enables **password login**: bcrypt hash of the shared password (`go run ./cmd/hashpw '<password>'`) |
+| `APP_PASSWORD` | _(unset)_ | Plaintext variant for local dev; `APP_PASSWORD_HASH` wins when both are set |
 | `NOTION_TOKEN` | _(unset)_ | Internal-integration token for **Notion sync** (pairs with `APP_PASSWORD`; no OAuth needed) |
 | `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | _(unset)_ | Enables **Sign in with Notion** (OAuth; needs a public integration). With neither this nor `APP_PASSWORD` set, the app runs open, no login |
 | `NOTION_REDIRECT_URI` | `http://localhost:5173/api/auth/notion/callback` | Must exactly match the redirect URI registered on the Notion integration |
@@ -128,7 +129,8 @@ source of truth. Two setups:
    and copy its token (`ntn_…`).
 2. In Notion, open any page → ••• → **Connections** → add your integration
    (the sync creates the "Money Tracker" page inside it).
-3. Run the backend with `APP_PASSWORD=<choose one>` and `NOTION_TOKEN=ntn_…`.
+3. Run the backend with `APP_PASSWORD_HASH="$(go run ./cmd/hashpw '<choose one>')"`
+   and `NOTION_TOKEN=ntn_…`.
 
 **OAuth ("Sign in with Notion"):** make the integration **public** (needs
 redirect URI, e.g. `http://localhost:5173/api/auth/notion/callback` in dev)

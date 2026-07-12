@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"moneytracker/backend/internal/storage"
 )
 
@@ -40,14 +42,15 @@ const (
 
 // Config is read from the environment in cmd/server.
 type Config struct {
-	ClientID      string
-	ClientSecret  string
-	RedirectURI   string
-	AppPassword   string // password login (APP_PASSWORD) — simpler alternative to Notion OAuth
-	FrontendURL   string // where the callback redirects after login (default "/")
-	SessionSecret string // HMAC key; random per boot when empty
-	AllowedEmails []string
-	CrossSite     bool // SameSite=None + Secure, for frontend and API on different domains
+	ClientID        string
+	ClientSecret    string
+	RedirectURI     string
+	AppPassword     string // password login, plaintext (APP_PASSWORD) — dev convenience
+	AppPasswordHash string // password login, bcrypt hash (APP_PASSWORD_HASH) — preferred; wins over plaintext
+	FrontendURL     string // where the callback redirects after login (default "/")
+	SessionSecret   string // HMAC key; random per boot when empty
+	AllowedEmails   []string
+	CrossSite       bool // SameSite=None + Secure, for frontend and API on different domains
 }
 
 // passwordUserID is the session subject for password logins (no Notion account).
@@ -87,12 +90,15 @@ func New(cfg Config, accountsBlob storage.Blob) (*Service, error) {
 	if s.Enabled() && len(s.allowedEmails) == 0 {
 		log.Println("auth: ALLOWED_NOTION_EMAILS not set; any Notion user can log in")
 	}
+	if s.cfg.AppPassword != "" && s.cfg.AppPasswordHash == "" {
+		log.Println("auth: APP_PASSWORD is plaintext; prefer APP_PASSWORD_HASH (generate: go run ./cmd/hashpw '<password>')")
+	}
 	return s, nil
 }
 
 // Enabled reports whether any login is configured (Notion OAuth or password).
 // When false the app runs open (no login), matching the pre-auth behavior.
-func (s *Service) Enabled() bool { return s.notionOAuth() || s.cfg.AppPassword != "" }
+func (s *Service) Enabled() bool { return s.notionOAuth() || s.passwordConfigured() }
 
 // Mode returns the active login mechanism: "notion", "password", or "".
 // Notion OAuth wins when both are configured.
@@ -100,7 +106,7 @@ func (s *Service) Mode() string {
 	switch {
 	case s.notionOAuth():
 		return "notion"
-	case s.cfg.AppPassword != "":
+	case s.passwordConfigured():
 		return "password"
 	default:
 		return ""
@@ -108,6 +114,19 @@ func (s *Service) Mode() string {
 }
 
 func (s *Service) notionOAuth() bool { return s.cfg.ClientID != "" && s.cfg.ClientSecret != "" }
+
+func (s *Service) passwordConfigured() bool {
+	return s.cfg.AppPasswordHash != "" || s.cfg.AppPassword != ""
+}
+
+// checkPassword verifies against the bcrypt hash when set, else the plaintext
+// (constant-time either way).
+func (s *Service) checkPassword(pw string) bool {
+	if s.cfg.AppPasswordHash != "" {
+		return bcrypt.CompareHashAndPassword([]byte(s.cfg.AppPasswordHash), []byte(pw)) == nil
+	}
+	return subtle.ConstantTimeCompare([]byte(pw), []byte(s.cfg.AppPassword)) == 1
+}
 
 func (s *Service) Accounts() *Accounts { return s.accounts }
 func (s *Service) FrontendURL() string { return s.cfg.FrontendURL }
@@ -210,7 +229,7 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 // Notion account, or the password user while password login is configured.
 func (s *Service) subjectValid(uid string) bool {
 	if uid == passwordUserID {
-		return s.cfg.AppPassword != ""
+		return s.passwordConfigured()
 	}
 	_, exists := s.accounts.Get(uid)
 	return exists
@@ -218,9 +237,9 @@ func (s *Service) subjectValid(uid string) bool {
 
 // ---- password login ----
 
-// PasswordLogin issues a session for the shared app password (APP_PASSWORD).
+// PasswordLogin issues a session for the shared app password.
 func (s *Service) PasswordLogin(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.AppPassword == "" {
+	if !s.passwordConfigured() {
 		http.Error(w, "password login is not configured", http.StatusNotFound)
 		return
 	}
@@ -231,7 +250,7 @@ func (s *Service) PasswordLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if subtle.ConstantTimeCompare([]byte(in.Password), []byte(s.cfg.AppPassword)) != 1 {
+	if !s.checkPassword(in.Password) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wrong password"})
