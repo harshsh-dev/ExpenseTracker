@@ -2,6 +2,17 @@ import type { Category, Expense, Income, Investment, Snapshot } from '../types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
+// Session token in localStorage + Authorization header. Cookies alone don't
+// survive cross-site (Hosting ↔ Render) — Safari et al. block them.
+const TOKEN_KEY = 'mt_session_token'
+let authToken: string | null = localStorage.getItem(TOKEN_KEY)
+
+function setAuthToken(token: string | null) {
+  authToken = token
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -13,8 +24,11 @@ export class ApiError extends Error {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    credentials: 'include', // session cookie when Notion login is enabled
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    credentials: 'include', // session cookie (same-origin setups)
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -92,8 +106,14 @@ export const notionLoginUrl = `${BASE}/api/auth/notion/login`
 
 export const api = {
   getMe: () => request<AuthMe>('GET', '/api/auth/me'),
-  login: (password: string) => request<void>('POST', '/api/auth/login', { password }),
-  logout: () => request<void>('POST', '/api/auth/logout'),
+  login: async (password: string) => {
+    const { token } = await request<{ token: string }>('POST', '/api/auth/login', { password })
+    setAuthToken(token)
+  },
+  logout: async () => {
+    await request<void>('POST', '/api/auth/logout')
+    setAuthToken(null)
+  },
   notionStatus: () => request<NotionStatus>('GET', '/api/notion/status'),
   notionSync: () => request<{ status: string }>('POST', '/api/notion/sync'),
   getConfig: () => request<AppConfig>('GET', '/api/config'),

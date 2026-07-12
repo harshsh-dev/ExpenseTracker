@@ -32,7 +32,7 @@ func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowed
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: allowedOrigins,
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Accept", "Content-Type"},
+		AllowedHeaders: []string{"Accept", "Content-Type", "Authorization"},
 		// Always allow credentials: the SPA sends every request with
 		// credentials included (session cookie), and browsers reject
 		// credentialed responses that lack this header — even when auth is

@@ -174,6 +174,19 @@ func UserID(ctx context.Context) string {
 	return uid
 }
 
+// sessionToken extracts the raw session token from the Authorization header
+// (primary — cross-site cookies are blocked by Safari and others when the SPA
+// and API live on different domains) or the cookie (same-origin setups).
+func sessionToken(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		return c.Value
+	}
+	return ""
+}
+
 // Middleware rejects requests without a valid session when auth is enabled.
 func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -181,9 +194,8 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		c, err := r.Cookie(sessionCookie)
-		if err == nil {
-			if uid, ok := s.verifySession(c.Value); ok && s.subjectValid(uid) {
+		if tok := sessionToken(r); tok != "" {
+			if uid, ok := s.verifySession(tok); ok && s.subjectValid(uid) {
 				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, uid)))
 				return
 			}
@@ -226,8 +238,12 @@ func (s *Service) PasswordLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires := time.Now().Add(sessionTTL)
-	s.setCookie(w, sessionCookie, s.signSession(passwordUserID, expires), int(sessionTTL.Seconds()))
-	w.WriteHeader(http.StatusNoContent)
+	tok := s.signSession(passwordUserID, expires)
+	// Cookie for same-origin setups; the token in the body lets the SPA use
+	// an Authorization header where cross-site cookies are blocked.
+	s.setCookie(w, sessionCookie, tok, int(sessionTTL.Seconds()))
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"token": tok})
 }
 
 // ---- OAuth flow ----
@@ -328,11 +344,11 @@ func (s *Service) CurrentUser(r *http.Request) (Account, bool) {
 // SessionSubject returns the valid session's user id (which may be the
 // password user, with no account behind it).
 func (s *Service) SessionSubject(r *http.Request) (string, bool) {
-	c, err := r.Cookie(sessionCookie)
-	if err != nil {
+	tok := sessionToken(r)
+	if tok == "" {
 		return "", false
 	}
-	uid, ok := s.verifySession(c.Value)
+	uid, ok := s.verifySession(tok)
 	if !ok || !s.subjectValid(uid) {
 		return "", false
 	}
