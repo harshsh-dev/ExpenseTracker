@@ -41,6 +41,7 @@ func main() {
 		// Default assumes the Vite dev proxy so the session cookie lands
 		// on the frontend origin; set explicitly in production.
 		RedirectURI:   env("NOTION_REDIRECT_URI", "http://localhost:5173/api/auth/notion/callback"),
+		AppPassword:   env("APP_PASSWORD", ""),
 		FrontendURL:   env("FRONTEND_URL", "/"),
 		SessionSecret: env("SESSION_SECRET", ""),
 		AllowedEmails: strings.Split(env("ALLOWED_NOTION_EMAILS", ""), ","),
@@ -51,11 +52,11 @@ func main() {
 		log.Fatalf("init auth: %v", err)
 	}
 	if a.Enabled() {
-		log.Println("notion login enabled")
+		log.Printf("login enabled (mode: %s)", a.Mode())
 	} else {
-		log.Println("notion login not configured (NOTION_CLIENT_ID/SECRET unset) — running open")
+		log.Println("login not configured (NOTION_CLIENT_ID/SECRET and APP_PASSWORD unset) — running open")
 	}
-	y := notion.NewSyncer(s, a.Accounts())
+	y := notion.NewSyncer(s, a.Accounts(), env("NOTION_TOKEN", ""))
 
 	q := quotes.New(s)
 	if feats.Enabled(config.Investments) {

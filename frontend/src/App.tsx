@@ -55,21 +55,24 @@ function NavItems({ items }: { items: NavEntry[] }) {
 
 function UserMenu() {
   const { enabled, user, logout } = useAuth()
-  if (!enabled || !user) return null
+  // Only rendered once authenticated; password mode has no user profile.
+  if (!enabled) return null
   return (
     <>
-      <div className="nav-item" style={{ cursor: 'default' }} title={user.email}>
-        {user.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt=""
-            style={{ width: 17, height: 17, borderRadius: '50%' }}
-          />
-        ) : (
-          <IconBrandNotionDot />
-        )}
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</span>
-      </div>
+      {user && (
+        <div className="nav-item" style={{ cursor: 'default' }} title={user.email}>
+          {user.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt=""
+              style={{ width: 17, height: 17, borderRadius: '50%' }}
+            />
+          ) : (
+            <IconBrandNotionDot />
+          )}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</span>
+        </div>
+      )}
       <button className="nav-item" onClick={() => void logout()} title="Sign out">
         <IconLogout size={17} stroke={1.75} />
         Sign out

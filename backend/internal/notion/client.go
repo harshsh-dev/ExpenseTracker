@@ -131,6 +131,39 @@ func (c *Client) FirstSharedPage(ctx context.Context) (string, error) {
 	return res.Results[0].ID, nil
 }
 
+// FindPageByTitle returns an accessible page whose title matches exactly, so
+// a fresh server re-adopts an existing "Money Tracker" page instead of
+// creating a duplicate. Returns ("", "", nil) when none matches.
+func (c *Client) FindPageByTitle(ctx context.Context, title string) (id, url string, err error) {
+	body := map[string]any{
+		"query":     title,
+		"filter":    map[string]string{"property": "object", "value": "page"},
+		"page_size": 20,
+	}
+	var res struct {
+		Results []struct {
+			ID         string `json:"id"`
+			URL        string `json:"url"`
+			Properties map[string]struct {
+				Title []struct {
+					PlainText string `json:"plain_text"`
+				} `json:"title"`
+			} `json:"properties"`
+		} `json:"results"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/search", body, &res); err != nil {
+		return "", "", err
+	}
+	for _, r := range res.Results {
+		for _, p := range r.Properties {
+			if len(p.Title) > 0 && p.Title[0].PlainText == title {
+				return r.ID, r.URL, nil
+			}
+		}
+	}
+	return "", "", nil
+}
+
 // CreatePage creates a child page under parentID and returns its id + URL.
 func (c *Client) CreatePage(ctx context.Context, parentID, title string) (id, url string, err error) {
 	body := map[string]any{

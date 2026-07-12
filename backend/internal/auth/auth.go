@@ -13,6 +13,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -42,11 +43,15 @@ type Config struct {
 	ClientID      string
 	ClientSecret  string
 	RedirectURI   string
+	AppPassword   string // password login (APP_PASSWORD) — simpler alternative to Notion OAuth
 	FrontendURL   string // where the callback redirects after login (default "/")
 	SessionSecret string // HMAC key; random per boot when empty
 	AllowedEmails []string
 	CrossSite     bool // SameSite=None + Secure, for frontend and API on different domains
 }
+
+// passwordUserID is the session subject for password logins (no Notion account).
+const passwordUserID = "local"
 
 // Service holds auth config, the session signer, and the persisted accounts.
 type Service struct {
@@ -85,9 +90,24 @@ func New(cfg Config, accountsBlob storage.Blob) (*Service, error) {
 	return s, nil
 }
 
-// Enabled reports whether Notion login is configured. When false the app runs
-// open (no login), matching the pre-auth behavior.
-func (s *Service) Enabled() bool { return s.cfg.ClientID != "" && s.cfg.ClientSecret != "" }
+// Enabled reports whether any login is configured (Notion OAuth or password).
+// When false the app runs open (no login), matching the pre-auth behavior.
+func (s *Service) Enabled() bool { return s.notionOAuth() || s.cfg.AppPassword != "" }
+
+// Mode returns the active login mechanism: "notion", "password", or "".
+// Notion OAuth wins when both are configured.
+func (s *Service) Mode() string {
+	switch {
+	case s.notionOAuth():
+		return "notion"
+	case s.cfg.AppPassword != "":
+		return "password"
+	default:
+		return ""
+	}
+}
+
+func (s *Service) notionOAuth() bool { return s.cfg.ClientID != "" && s.cfg.ClientSecret != "" }
 
 func (s *Service) Accounts() *Accounts { return s.accounts }
 func (s *Service) FrontendURL() string { return s.cfg.FrontendURL }
@@ -163,11 +183,9 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		}
 		c, err := r.Cookie(sessionCookie)
 		if err == nil {
-			if uid, ok := s.verifySession(c.Value); ok {
-				if _, exists := s.accounts.Get(uid); exists {
-					next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, uid)))
-					return
-				}
+			if uid, ok := s.verifySession(c.Value); ok && s.subjectValid(uid) {
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, uid)))
+				return
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -176,11 +194,47 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+// subjectValid checks a session's subject still maps to a way in: a stored
+// Notion account, or the password user while password login is configured.
+func (s *Service) subjectValid(uid string) bool {
+	if uid == passwordUserID {
+		return s.cfg.AppPassword != ""
+	}
+	_, exists := s.accounts.Get(uid)
+	return exists
+}
+
+// ---- password login ----
+
+// PasswordLogin issues a session for the shared app password (APP_PASSWORD).
+func (s *Service) PasswordLogin(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.AppPassword == "" {
+		http.Error(w, "password login is not configured", http.StatusNotFound)
+		return
+	}
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(in.Password), []byte(s.cfg.AppPassword)) != 1 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "wrong password"})
+		return
+	}
+	expires := time.Now().Add(sessionTTL)
+	s.setCookie(w, sessionCookie, s.signSession(passwordUserID, expires), int(sessionTTL.Seconds()))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ---- OAuth flow ----
 
 // BeginLogin redirects the browser to Notion's consent screen.
 func (s *Service) BeginLogin(w http.ResponseWriter, r *http.Request) {
-	if !s.Enabled() {
+	if !s.notionOAuth() {
 		http.Error(w, "Notion login is not configured", http.StatusNotFound)
 		return
 	}
@@ -207,7 +261,7 @@ func (s *Service) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	fail := func(msg string) {
 		http.Redirect(w, r, s.cfg.FrontendURL+"?authError="+url.QueryEscape(msg), http.StatusFound)
 	}
-	if !s.Enabled() {
+	if !s.notionOAuth() {
 		http.Error(w, "Notion login is not configured", http.StatusNotFound)
 		return
 	}
@@ -264,15 +318,25 @@ func (s *Service) Logout(w http.ResponseWriter, _ *http.Request) {
 
 // CurrentUser resolves the session cookie to an account, if any.
 func (s *Service) CurrentUser(r *http.Request) (Account, bool) {
-	c, err := r.Cookie(sessionCookie)
-	if err != nil {
-		return Account{}, false
-	}
-	uid, ok := s.verifySession(c.Value)
+	uid, ok := s.SessionSubject(r)
 	if !ok {
 		return Account{}, false
 	}
 	return s.accounts.Get(uid)
+}
+
+// SessionSubject returns the valid session's user id (which may be the
+// password user, with no account behind it).
+func (s *Service) SessionSubject(r *http.Request) (string, bool) {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		return "", false
+	}
+	uid, ok := s.verifySession(c.Value)
+	if !ok || !s.subjectValid(uid) {
+		return "", false
+	}
+	return uid, true
 }
 
 // tokenResponse mirrors Notion's OAuth token endpoint response.

@@ -15,21 +15,19 @@ func meHandler(a *auth.Service) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"enabled": false, "authenticated": false})
 			return
 		}
-		acc, ok := a.CurrentUser(r)
-		if !ok {
-			writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "authenticated": false})
-			return
+		out := map[string]any{"enabled": true, "mode": a.Mode(), "authenticated": false}
+		if _, ok := a.SessionSubject(r); ok {
+			out["authenticated"] = true
+			if acc, ok := a.CurrentUser(r); ok {
+				out["user"] = map[string]string{
+					"name":          acc.Name,
+					"email":         acc.Email,
+					"avatarUrl":     acc.AvatarURL,
+					"workspaceName": acc.WorkspaceName,
+				}
+			}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"enabled":       true,
-			"authenticated": true,
-			"user": map[string]string{
-				"name":          acc.Name,
-				"email":         acc.Email,
-				"avatarUrl":     acc.AvatarURL,
-				"workspaceName": acc.WorkspaceName,
-			},
-		})
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 

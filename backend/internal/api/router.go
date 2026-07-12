@@ -52,6 +52,7 @@ func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowed
 		r.Route("/auth", func(r chi.Router) {
 			r.Get("/notion/login", a.BeginLogin)
 			r.Get("/notion/callback", a.HandleCallback)
+			r.Post("/login", a.PasswordLogin)
 			r.Get("/me", meHandler(a))
 			r.Post("/logout", a.Logout)
 		})

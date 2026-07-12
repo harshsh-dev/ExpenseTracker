@@ -62,6 +62,7 @@ export interface RefreshResult {
 export interface AuthMe {
   enabled: boolean
   authenticated: boolean
+  mode?: 'notion' | 'password'
   user?: { name: string; email: string; avatarUrl: string; workspaceName: string }
 }
 
@@ -91,6 +92,7 @@ export const notionLoginUrl = `${BASE}/api/auth/notion/login`
 
 export const api = {
   getMe: () => request<AuthMe>('GET', '/api/auth/me'),
+  login: (password: string) => request<void>('POST', '/api/auth/login', { password }),
   logout: () => request<void>('POST', '/api/auth/logout'),
   notionStatus: () => request<NotionStatus>('GET', '/api/notion/status'),
   notionSync: () => request<{ status: string }>('POST', '/api/notion/sync'),

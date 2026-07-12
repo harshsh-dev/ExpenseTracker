@@ -29,9 +29,16 @@ services:
         value: "on"
       - key: SESSION_SECRET
         generateValue: true
-      # Notion login — set these in the dashboard once the integration exists.
-      # While unset the API runs OPEN (no login): anyone with the URL can
+      # Login — set at least one of these in the dashboard. While both are
+      # unset the API runs OPEN (no login): anyone with the URL can
       # read/write data.
+      #
+      # Simple mode: shared app password + internal-integration token for sync.
+      - key: APP_PASSWORD
+        sync: false
+      - key: NOTION_TOKEN
+        sync: false
+      # OAuth mode ("Sign in with Notion"; needs a public Notion integration).
       - key: NOTION_CLIENT_ID
         sync: false
       - key: NOTION_CLIENT_SECRET

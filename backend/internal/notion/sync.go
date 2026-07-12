@@ -32,20 +32,46 @@ type Result struct {
 	Investments int       `json:"investments"`
 }
 
-// Syncer runs one-way exports of the store into a user's Notion workspace.
-// Runs are asynchronous (Notion's rate limit makes large syncs slow), so the
-// API starts a run and the frontend polls status.
+// Syncer runs one-way exports of the store into a Notion workspace. Runs are
+// asynchronous (Notion's rate limit makes large syncs slow), so the API
+// starts a run and the frontend polls status.
+//
+// The Notion token comes from the logged-in user's OAuth account, or — when
+// NOTION_TOKEN is set — from that fixed internal-integration token, whose
+// sync state lives under a synthetic "internal" account.
 type Syncer struct {
 	store    *store.Store
 	accounts *auth.Accounts
+	envToken string
 
 	mu      sync.Mutex
 	running bool
 	last    *Result
 }
 
-func NewSyncer(s *store.Store, accounts *auth.Accounts) *Syncer {
-	return &Syncer{store: s, accounts: accounts}
+const internalUserID = "internal"
+
+func NewSyncer(s *store.Store, accounts *auth.Accounts, envToken string) *Syncer {
+	return &Syncer{store: s, accounts: accounts, envToken: envToken}
+}
+
+// resolve picks the account that owns the sync state and the token to use.
+func (y *Syncer) resolve(userID string) (auth.Account, string, error) {
+	if y.envToken != "" {
+		acc, ok := y.accounts.Get(internalUserID)
+		if !ok {
+			acc = auth.Account{UserID: internalUserID, Name: "Notion (internal token)", ConnectedAt: time.Now().UTC()}
+			if err := y.accounts.Put(acc); err != nil {
+				return auth.Account{}, "", err
+			}
+		}
+		return acc, y.envToken, nil
+	}
+	acc, ok := y.accounts.Get(userID)
+	if !ok || acc.AccessToken == "" {
+		return auth.Account{}, "", errors.New("no Notion account connected")
+	}
+	return acc, acc.AccessToken, nil
 }
 
 // Status is the JSON shape the frontend polls.
@@ -62,8 +88,13 @@ func (y *Syncer) Status(userID string) Status {
 	y.mu.Lock()
 	st := Status{Running: y.running, Last: y.last}
 	y.mu.Unlock()
-	if acc, ok := y.accounts.Get(userID); ok {
-		st.Connected = acc.AccessToken != ""
+	lookup := userID
+	if y.envToken != "" {
+		st.Connected = true
+		lookup = internalUserID
+	}
+	if acc, ok := y.accounts.Get(lookup); ok {
+		st.Connected = st.Connected || acc.AccessToken != ""
 		st.WorkspaceName = acc.WorkspaceName
 		st.PageURL = acc.Sync.PageURL
 		st.LastSyncedAt = acc.Sync.LastSyncedAt
@@ -74,9 +105,9 @@ func (y *Syncer) Status(userID string) Status {
 // Start kicks off a background sync for the given account. Only one run at a
 // time; a second Start while running returns an error.
 func (y *Syncer) Start(userID string) error {
-	acc, ok := y.accounts.Get(userID)
-	if !ok || acc.AccessToken == "" {
-		return errors.New("no Notion account connected")
+	acc, token, err := y.resolve(userID)
+	if err != nil {
+		return err
 	}
 	y.mu.Lock()
 	defer y.mu.Unlock()
@@ -84,16 +115,16 @@ func (y *Syncer) Start(userID string) error {
 		return errors.New("a sync is already running")
 	}
 	y.running = true
-	go y.run(acc)
+	go y.run(acc, token)
 	return nil
 }
 
-func (y *Syncer) run(acc auth.Account) {
+func (y *Syncer) run(acc auth.Account, token string) {
 	res := &Result{StartedAt: time.Now().UTC()}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
-	err := y.sync(ctx, acc, res)
+	err := y.sync(ctx, acc, token, res)
 	res.FinishedAt = time.Now().UTC()
 	if err != nil {
 		res.Error = err.Error()
@@ -110,8 +141,8 @@ func (y *Syncer) run(acc auth.Account) {
 	y.mu.Unlock()
 }
 
-func (y *Syncer) sync(ctx context.Context, acc auth.Account, res *Result) error {
-	c := NewClient(acc.AccessToken)
+func (y *Syncer) sync(ctx context.Context, acc auth.Account, token string, res *Result) error {
+	c := NewClient(token)
 	state, err := y.ensureTargets(ctx, c, acc)
 	if err != nil {
 		return err
@@ -179,13 +210,21 @@ func (y *Syncer) ensureTargets(ctx context.Context, c *Client, acc auth.Account)
 	state := acc.Sync
 
 	if state.PageID == "" || !c.PageExists(ctx, state.PageID) {
-		parent, err := c.FirstSharedPage(ctx)
+		// Prefer an existing "Money Tracker" page (e.g. created by a previous
+		// deployment) over making a duplicate.
+		id, url, err := c.FindPageByTitle(ctx, pageTitle)
 		if err != nil {
 			return state, err
 		}
-		id, url, err := c.CreatePage(ctx, parent, pageTitle)
-		if err != nil {
-			return state, err
+		if id == "" {
+			parent, err := c.FirstSharedPage(ctx)
+			if err != nil {
+				return state, err
+			}
+			id, url, err = c.CreatePage(ctx, parent, pageTitle)
+			if err != nil {
+				return state, err
+			}
 		}
 		state = auth.SyncState{PageID: id, PageURL: url}
 	}

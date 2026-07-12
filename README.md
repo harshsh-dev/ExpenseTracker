@@ -106,7 +106,9 @@ Open http://localhost:5173. The Vite dev server proxies API calls to the backend
 | `FEATURES` | `all` | Which features to enable, comma-separated (`income,expenses,investments,categories,dashboard,report,backup`). `all`/empty = full app. See [§7](#7-feature-wise-deployment). |
 | `QUOTES_REFRESH` | `on` | Set `off` to disable the periodic price auto-refresh |
 | `QUOTES_REFRESH_INTERVAL` | `12h` | How often prices auto-refresh (Go duration) |
-| `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | _(unset)_ | Enables **Sign in with Notion** + Notion sync (see below). Unset = app runs open, no login |
+| `APP_PASSWORD` | _(unset)_ | Enables **password login** (single shared password) — the simple alternative to Notion OAuth |
+| `NOTION_TOKEN` | _(unset)_ | Internal-integration token for **Notion sync** (pairs with `APP_PASSWORD`; no OAuth needed) |
+| `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | _(unset)_ | Enables **Sign in with Notion** (OAuth; needs a public integration). With neither this nor `APP_PASSWORD` set, the app runs open, no login |
 | `NOTION_REDIRECT_URI` | `http://localhost:5173/api/auth/notion/callback` | Must exactly match the redirect URI registered on the Notion integration |
 | `ALLOWED_NOTION_EMAILS` | _(unset = anyone)_ | Comma-separated Notion account emails allowed to log in — **set this in prod** |
 | `SESSION_SECRET` | _(random per boot)_ | HMAC key for session cookies; set it so logins survive restarts |
@@ -114,21 +116,28 @@ Open http://localhost:5173. The Vite dev server proxies API calls to the backend
 | `CROSS_SITE_COOKIES` | `off` | Set `on` (SameSite=None + Secure) when frontend and API are on different domains |
 | `AUTH_PATH` | `<data dir>/auth.json` | Where Notion accounts/tokens are stored (never part of backups) |
 
-### Notion login & sync (optional)
+### Login & Notion sync (optional)
 
-The app can use **Notion as its login** (OAuth 2.0) and mirror all data into
-databases on a **"Money Tracker"** page in your workspace — one-way, the app
-stays the source of truth.
+The app can require a login and mirror all data into databases on a
+**"Money Tracker"** page in your Notion workspace — one-way, the app stays the
+source of truth. Two setups:
 
-1. Create a **public integration** at [notion.so/my-integrations](https://www.notion.so/my-integrations)
-   with redirect URI `http://localhost:5173/api/auth/notion/callback` (dev).
-2. Run the backend with `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, and
-   `ALLOWED_NOTION_EMAILS=you@example.com`.
-3. Open the app → **Continue with Notion**. On the consent screen, share at
-   least one page — the sync creates the "Money Tracker" page inside it.
-4. **Backup page → Notion sync → Sync to Notion.** Re-syncs upsert (no
-   duplicates); rows are matched by the hidden `App ID` column. Large datasets
-   take a few minutes (Notion allows ~3 requests/sec).
+**Simple (recommended): password login + internal token.**
+
+1. Create an **internal integration** at [notion.so/my-integrations](https://www.notion.so/my-integrations)
+   and copy its token (`ntn_…`).
+2. In Notion, open any page → ••• → **Connections** → add your integration
+   (the sync creates the "Money Tracker" page inside it).
+3. Run the backend with `APP_PASSWORD=<choose one>` and `NOTION_TOKEN=ntn_…`.
+
+**OAuth ("Sign in with Notion"):** make the integration **public** (needs
+redirect URI, e.g. `http://localhost:5173/api/auth/notion/callback` in dev)
+and set `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, `ALLOWED_NOTION_EMAILS`.
+Users then log in with their Notion account and sync uses their own token.
+
+Either way: **Backup page → Notion sync → Sync to Notion.** Re-syncs upsert
+(no duplicates); rows are matched by the hidden `App ID` column. Large
+datasets take a few minutes (Notion allows ~3 requests/sec).
 
 ---
 

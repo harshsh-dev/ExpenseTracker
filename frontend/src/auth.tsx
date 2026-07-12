@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { IconBrandNotion, IconWallet } from '@tabler/icons-react'
+import { IconBrandNotion, IconLogin2, IconWallet } from '@tabler/icons-react'
 import { api, notionLoginUrl, type AuthMe } from './api/client'
-import { Button, Card } from './components/ui'
+import { Button, Card, Input } from './components/ui'
 
 interface AuthState {
   enabled: boolean
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // If /api/auth/me itself failed (backend down), let the app render; the
   // feature/data queries will surface the real error.
   if (me?.enabled && !me.authenticated) {
-    return <Login />
+    return <Login mode={me.mode} />
   }
 
   const logout = async () => {
@@ -65,8 +65,25 @@ export function useAuth(): AuthState {
   return useContext(AuthContext)
 }
 
-function Login() {
-  const error = new URLSearchParams(window.location.search).get('authError')
+function Login({ mode }: { mode?: AuthMe['mode'] }) {
+  const qc = useQueryClient()
+  const urlError = new URLSearchParams(window.location.search).get('authError')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(urlError)
+  const [busy, setBusy] = useState(false)
+
+  async function submitPassword() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.login(password)
+      await qc.invalidateQueries({ queryKey: ['auth', 'me'] })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="app-loading" style={{ padding: 16 }}>
@@ -75,20 +92,50 @@ function Login() {
           <div className="logo" style={{ justifyContent: 'center' }}>
             <IconWallet size={22} stroke={1.75} /> Money Tracker
           </div>
-          <p className="muted" style={{ fontSize: 13 }}>
-            Sign in with your Notion account to access your money tracker and
-            sync your data to a Notion workspace.
-          </p>
-          {error && (
-            <p style={{ fontSize: 13, color: 'var(--color-negative)' }}>{error}</p>
+
+          {mode === 'password' ? (
+            <form
+              style={{ display: 'grid', gap: 12 }}
+              onSubmit={(e) => {
+                e.preventDefault()
+                void submitPassword()
+              }}
+            >
+              <p className="muted" style={{ fontSize: 13 }}>
+                Enter the app password to access your money tracker.
+              </p>
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus
+              />
+              {error && (
+                <p style={{ fontSize: 13, color: 'var(--color-negative)' }}>{error}</p>
+              )}
+              <Button type="submit" disabled={busy || password === ''}>
+                <IconLogin2 size={17} stroke={1.75} /> {busy ? 'Signing in…' : 'Sign in'}
+              </Button>
+            </form>
+          ) : (
+            <>
+              <p className="muted" style={{ fontSize: 13 }}>
+                Sign in with your Notion account to access your money tracker
+                and sync your data to a Notion workspace.
+              </p>
+              {error && (
+                <p style={{ fontSize: 13, color: 'var(--color-negative)' }}>{error}</p>
+              )}
+              <Button onClick={() => (window.location.href = notionLoginUrl)}>
+                <IconBrandNotion size={17} stroke={1.75} /> Continue with Notion
+              </Button>
+              <p className="muted" style={{ fontSize: 11 }}>
+                On the Notion consent screen, share at least one page — the
+                sync creates a “Money Tracker” page inside it.
+              </p>
+            </>
           )}
-          <Button onClick={() => (window.location.href = notionLoginUrl)}>
-            <IconBrandNotion size={17} stroke={1.75} /> Continue with Notion
-          </Button>
-          <p className="muted" style={{ fontSize: 11 }}>
-            On the Notion consent screen, share at least one page — the sync
-            creates a “Money Tracker” page inside it.
-          </p>
         </div>
       </Card>
     </div>
