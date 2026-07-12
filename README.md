@@ -143,8 +143,13 @@ datasets take a few minutes (Notion allows ~3 requests/sec).
 
 **Pull from Notion** imports the other way: rows added in Notion (no App ID)
 are created in the app, rows edited in Notion win when their edit is newer,
-invalid rows are skipped with a report, and deletions never propagate in
-either direction. Unknown category names are auto-created.
+invalid rows are skipped with a report, and unknown category names are
+auto-created.
+
+**Deletions:** the app is the source of truth. Deleting an entry in the app
+archives its Notion row on the next push (recoverable from Notion's trash);
+deleting a row in Notion never deletes from the app — the next push simply
+restores the row.
 
 ---
 

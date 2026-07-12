@@ -190,7 +190,9 @@ function NotionSyncCard() {
               ? `Last sync failed: ${last.error}`
               : status?.lastSyncedAt
                 ? `Last synced ${new Date(status.lastSyncedAt).toLocaleString()}` +
-                  (last ? ` — ${last.created} created, ${last.updated} updated.` : '.')
+                  (last
+                    ? ` — ${last.created} created, ${last.updated} updated, ${last.archived} removed.`
+                    : '.')
                 : 'Never synced yet.'}
       </p>
       {lastPull && !running && (

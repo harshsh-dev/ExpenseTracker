@@ -86,6 +86,7 @@ export interface NotionSyncResult {
   error?: string
   created: number
   updated: number
+  archived: number
   expenses: number
   incomes: number
   investments: number

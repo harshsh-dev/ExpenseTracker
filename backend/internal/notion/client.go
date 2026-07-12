@@ -397,6 +397,11 @@ func (c *Client) UpdateRow(ctx context.Context, pageID string, properties map[st
 	return c.do(ctx, http.MethodPatch, "/pages/"+pageID, map[string]any{"properties": properties}, nil)
 }
 
+// ArchiveRow moves a row to Notion's trash (recoverable for ~30 days).
+func (c *Client) ArchiveRow(ctx context.Context, pageID string) error {
+	return c.do(ctx, http.MethodPatch, "/pages/"+pageID, map[string]any{"archived": true}, nil)
+}
+
 // ---- property value builders ----
 
 func richText(s string) []map[string]any {

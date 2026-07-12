@@ -27,6 +27,7 @@ type Result struct {
 	Error       string    `json:"error,omitempty"`
 	Created     int       `json:"created"`
 	Updated     int       `json:"updated"`
+	Archived    int       `json:"archived"`
 	Expenses    int       `json:"expenses"`
 	Incomes     int       `json:"incomes"`
 	Investments int       `json:"investments"`
@@ -182,15 +183,20 @@ func (y *Syncer) sync(ctx context.Context, acc auth.Account, token string, res *
 	return nil
 }
 
-// upsertAll loads the existing App ID -> row map once, then creates or
-// updates each entity.
+// upsertAll loads the existing App ID -> row map once, creates or updates
+// each entity, then archives rows whose entity was deleted in the app (the
+// app is the source of truth; Notion's trash keeps them recoverable). Rows
+// without an App ID are untouched — they're Notion-side additions awaiting a
+// pull.
 func (y *Syncer) upsertAll(ctx context.Context, c *Client, dbID string, n int, res *Result, row func(i int) (appID string, props map[string]any)) error {
 	existing, err := c.ExistingRows(ctx, dbID)
 	if err != nil {
 		return err
 	}
+	pushed := make(map[string]bool, n)
 	for i := 0; i < n; i++ {
 		appID, props := row(i)
+		pushed[appID] = true
 		if pageID, ok := existing[appID]; ok {
 			if err := c.UpdateRow(ctx, pageID, props); err != nil {
 				return err
@@ -201,6 +207,14 @@ func (y *Syncer) upsertAll(ctx context.Context, c *Client, dbID string, n int, r
 				return err
 			}
 			res.Created++
+		}
+	}
+	for appID, pageID := range existing {
+		if !pushed[appID] {
+			if err := c.ArchiveRow(ctx, pageID); err != nil {
+				return err
+			}
+			res.Archived++
 		}
 	}
 	return nil
