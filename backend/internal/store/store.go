@@ -5,24 +5,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
 	"moneytracker/backend/internal/domain"
+	"moneytracker/backend/internal/storage"
 )
 
 // ErrNotFound is returned when an entity id does not exist.
 var ErrNotFound = errors.New("not found")
 
 // Store is the in-memory database. Every mutation is persisted to a JSON
-// snapshot on disk so a restart/redeploy can rehydrate (true to the
-// in-memory-first design, with the snapshot as the durability + backup layer).
+// snapshot blob (a local file by default, Firestore on diskless hosts) so a
+// restart/redeploy can rehydrate — true to the in-memory-first design, with
+// the snapshot as the durability + backup layer.
 type Store struct {
 	mu   sync.RWMutex
-	path string
+	blob storage.Blob
 
 	incomes     map[string]domain.Income
 	expenses    map[string]domain.Expense
@@ -30,11 +30,11 @@ type Store struct {
 	categories  map[string]domain.Category
 }
 
-// New creates a store backed by the snapshot at path. If the file exists it is
-// loaded; otherwise an empty store is seeded with the default categories.
-func New(path string) (*Store, error) {
+// New creates a store backed by the given snapshot blob. If the blob exists it
+// is loaded; otherwise an empty store is seeded with the default categories.
+func New(blob storage.Blob) (*Store, error) {
 	s := &Store{
-		path:        path,
+		blob:        blob,
 		incomes:     map[string]domain.Income{},
 		expenses:    map[string]domain.Expense{},
 		investments: map[string]domain.Investment{},
@@ -58,12 +58,12 @@ func New(path string) (*Store, error) {
 // ---- persistence ----
 
 func (s *Store) load() error {
-	b, err := os.ReadFile(s.path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	b, err := s.blob.Load()
 	if err != nil {
 		return err
+	}
+	if b == nil {
+		return nil
 	}
 	var snap Snapshot
 	if err := json.Unmarshal(b, &snap); err != nil {
@@ -73,21 +73,14 @@ func (s *Store) load() error {
 	return nil
 }
 
-// persist writes the snapshot atomically (temp file + rename).
+// persist writes the snapshot atomically (the blob backend guarantees it).
 func (s *Store) persist() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return err
-	}
 	snap := s.snapshotLocked()
 	b, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return s.blob.Save(b)
 }
 
 func (s *Store) snapshotLocked() Snapshot {

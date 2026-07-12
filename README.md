@@ -98,11 +98,37 @@ Open http://localhost:5173. The Vite dev server proxies API calls to the backend
 | Var | Default | Purpose |
 |-----|---------|---------|
 | `PORT` | `8080` | Listen port |
-| `DATA_PATH` | `data/snapshot.json` | Snapshot file location |
+| `STORAGE_BACKEND` | `file` | `file` (local disk) or `firestore` (for diskless hosts like Render free tier) |
+| `DATA_PATH` | `data/snapshot.json` | Snapshot file location (`file` backend) |
+| `FIRESTORE_PROJECT_ID` | _(unset)_ | Firebase/GCP project id (`firestore` backend) |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | _(unset)_ | Service-account key JSON with `roles/datastore.user` (`firestore` backend); falls back to ADC when unset |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated CORS origins (set to your frontend URL in prod) |
 | `FEATURES` | `all` | Which features to enable, comma-separated (`income,expenses,investments,categories,dashboard,report,backup`). `all`/empty = full app. See [§7](#7-feature-wise-deployment). |
 | `QUOTES_REFRESH` | `on` | Set `off` to disable the periodic price auto-refresh |
 | `QUOTES_REFRESH_INTERVAL` | `12h` | How often prices auto-refresh (Go duration) |
+| `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | _(unset)_ | Enables **Sign in with Notion** + Notion sync (see below). Unset = app runs open, no login |
+| `NOTION_REDIRECT_URI` | `http://localhost:5173/api/auth/notion/callback` | Must exactly match the redirect URI registered on the Notion integration |
+| `ALLOWED_NOTION_EMAILS` | _(unset = anyone)_ | Comma-separated Notion account emails allowed to log in — **set this in prod** |
+| `SESSION_SECRET` | _(random per boot)_ | HMAC key for session cookies; set it so logins survive restarts |
+| `FRONTEND_URL` | `/` | Where the OAuth callback redirects after login (set when frontend is on another domain) |
+| `CROSS_SITE_COOKIES` | `off` | Set `on` (SameSite=None + Secure) when frontend and API are on different domains |
+| `AUTH_PATH` | `<data dir>/auth.json` | Where Notion accounts/tokens are stored (never part of backups) |
+
+### Notion login & sync (optional)
+
+The app can use **Notion as its login** (OAuth 2.0) and mirror all data into
+databases on a **"Money Tracker"** page in your workspace — one-way, the app
+stays the source of truth.
+
+1. Create a **public integration** at [notion.so/my-integrations](https://www.notion.so/my-integrations)
+   with redirect URI `http://localhost:5173/api/auth/notion/callback` (dev).
+2. Run the backend with `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, and
+   `ALLOWED_NOTION_EMAILS=you@example.com`.
+3. Open the app → **Continue with Notion**. On the consent screen, share at
+   least one page — the sync creates the "Money Tracker" page inside it.
+4. **Backup page → Notion sync → Sync to Notion.** Re-syncs upsert (no
+   duplicates); rows are matched by the hidden `App ID` column. Large datasets
+   take a few minutes (Notion allows ~3 requests/sec).
 
 ---
 
@@ -122,6 +148,28 @@ docker run -p 8080:8080 -v $PWD/data:/app/data money-tracker-api
 - **Frontend:** deploy `frontend/` to Vercel; set `VITE_API_URL` to the backend's public URL (optionally `VITE_FEATURES` to trim modules at build time).
 - **Backend:** deploy the Docker image to Render / Railway / Fly.io / a VPS, with a **persistent volume mounted at `/app/data`** so the snapshot survives restarts. Set `ALLOWED_ORIGINS` to the frontend origin and `FEATURES` to the modules you want live.
 - The snapshot is your safety net: download it quarterly so you can restore anywhere.
+
+**Firebase / Google Cloud:** see [docs/FIREBASE_LAUNCH_PLAN.md](docs/FIREBASE_LAUNCH_PLAN.md) for Hosting + Cloud Run (or VM) launch steps, persistence options, and CI/CD.
+
+### Zero-cost deploy (no card): Firebase Hosting + Render + Firestore
+
+The backend can run **stateless** by keeping the snapshot in **Firestore**
+(free Spark tier) instead of on disk, which makes Render's free tier viable
+(its ephemeral disk and idle spin-down no longer lose data):
+
+1. **Firestore:** create the database (`gcloud firestore databases create --location=asia-south1`),
+   a service account with `roles/datastore.user`, and download its key JSON.
+2. **Render:** create a Blueprint from this repo — [render.yaml](render.yaml)
+   defines the service. Paste the key into `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+   in the dashboard.
+3. **Frontend:** `VITE_API_URL=https://<service>.onrender.com npm run build`,
+   then `firebase deploy --only hosting`.
+4. **Notion login:** set `NOTION_CLIENT_ID/SECRET`, `NOTION_REDIRECT_URI`
+   (`https://<service>.onrender.com/api/auth/notion/callback`) and
+   `ALLOWED_NOTION_EMAILS` on Render — without them the API is open to anyone.
+
+Trade-off vs Cloud Run: the free instance sleeps after ~15 idle minutes; the
+first request after that takes ~30–60 s to wake.
 
 ---
 

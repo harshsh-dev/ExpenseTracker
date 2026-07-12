@@ -2,9 +2,18 @@ import type { Category, Expense, Income, Investment, Snapshot } from '../types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
+    credentials: 'include', // session cookie when Notion login is enabled
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
@@ -16,7 +25,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     } catch {
       /* ignore */
     }
-    throw new Error(msg)
+    // Session expired mid-use: tell AuthProvider to re-check and show login.
+    if (res.status === 401) window.dispatchEvent(new Event('auth:unauthorized'))
+    throw new ApiError(res.status, msg)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -48,7 +59,41 @@ export interface RefreshResult {
   refreshedAt: string
 }
 
+export interface AuthMe {
+  enabled: boolean
+  authenticated: boolean
+  user?: { name: string; email: string; avatarUrl: string; workspaceName: string }
+}
+
+export interface NotionSyncResult {
+  startedAt: string
+  finishedAt: string
+  error?: string
+  created: number
+  updated: number
+  expenses: number
+  incomes: number
+  investments: number
+}
+
+export interface NotionStatus {
+  configured: boolean
+  connected?: boolean
+  workspaceName?: string
+  pageUrl?: string
+  running?: boolean
+  lastSyncedAt?: string
+  last?: NotionSyncResult
+}
+
+// Full-page navigation target for "Continue with Notion" (OAuth redirect).
+export const notionLoginUrl = `${BASE}/api/auth/notion/login`
+
 export const api = {
+  getMe: () => request<AuthMe>('GET', '/api/auth/me'),
+  logout: () => request<void>('POST', '/api/auth/logout'),
+  notionStatus: () => request<NotionStatus>('GET', '/api/notion/status'),
+  notionSync: () => request<{ status: string }>('POST', '/api/notion/sync'),
   getConfig: () => request<AppConfig>('GET', '/api/config'),
   incomes: resource<Income>('/api/incomes'),
   expenses: resource<Expense>('/api/expenses'),

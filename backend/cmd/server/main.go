@@ -6,28 +6,56 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"moneytracker/backend/internal/api"
+	"moneytracker/backend/internal/auth"
 	"moneytracker/backend/internal/config"
+	"moneytracker/backend/internal/notion"
 	"moneytracker/backend/internal/quotes"
+	"moneytracker/backend/internal/storage"
 	"moneytracker/backend/internal/store"
 )
 
 func main() {
 	port := env("PORT", "8080")
-	dataPath := env("DATA_PATH", "data/snapshot.json")
 	origins := strings.Split(env("ALLOWED_ORIGINS", "http://localhost:5173"), ",")
 	feats := config.Parse(env("FEATURES", "all"))
 
-	s, err := store.New(dataPath)
+	snapBlob, authBlob := storageBlobs()
+
+	s, err := store.New(snapBlob)
 	if err != nil {
 		log.Fatalf("init store: %v", err)
 	}
-	log.Printf("store ready (snapshot: %s)", dataPath)
 	log.Printf("features enabled: %s", feats)
+
+	// Notion login ("Sign in with Notion"). Optional: without client
+	// credentials the app runs open, exactly as before.
+	authCfg := auth.Config{
+		ClientID:     env("NOTION_CLIENT_ID", ""),
+		ClientSecret: env("NOTION_CLIENT_SECRET", ""),
+		// Default assumes the Vite dev proxy so the session cookie lands
+		// on the frontend origin; set explicitly in production.
+		RedirectURI:   env("NOTION_REDIRECT_URI", "http://localhost:5173/api/auth/notion/callback"),
+		FrontendURL:   env("FRONTEND_URL", "/"),
+		SessionSecret: env("SESSION_SECRET", ""),
+		AllowedEmails: strings.Split(env("ALLOWED_NOTION_EMAILS", ""), ","),
+		CrossSite:     env("CROSS_SITE_COOKIES", "off") == "on",
+	}
+	a, err := auth.New(authCfg, authBlob)
+	if err != nil {
+		log.Fatalf("init auth: %v", err)
+	}
+	if a.Enabled() {
+		log.Println("notion login enabled")
+	} else {
+		log.Println("notion login not configured (NOTION_CLIENT_ID/SECRET unset) — running open")
+	}
+	y := notion.NewSyncer(s, a.Accounts())
 
 	q := quotes.New(s)
 	if feats.Enabled(config.Investments) {
@@ -36,7 +64,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         announceAddr(port),
-		Handler:      api.NewRouter(s, q, feats, origins),
+		Handler:      api.NewRouter(s, q, feats, origins, a, y),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -82,6 +110,29 @@ func startPriceScheduler(q *quotes.Service) {
 			time.Sleep(interval)
 		}
 	}()
+}
+
+// storageBlobs picks the persistence backend: local files by default, or
+// Firestore (STORAGE_BACKEND=firestore) for hosts without a persistent disk.
+func storageBlobs() (snapshot, accounts storage.Blob) {
+	switch env("STORAGE_BACKEND", "file") {
+	case "firestore":
+		fs, err := storage.NewFirestore(
+			context.Background(),
+			env("FIRESTORE_PROJECT_ID", ""),
+			[]byte(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")),
+		)
+		if err != nil {
+			log.Fatalf("init firestore: %v", err)
+		}
+		log.Println("storage: firestore")
+		return fs.Blob("snapshot.json"), fs.Blob("auth.json")
+	default:
+		dataPath := env("DATA_PATH", "data/snapshot.json")
+		authPath := env("AUTH_PATH", filepath.Join(filepath.Dir(dataPath), "auth.json"))
+		log.Printf("storage: file (snapshot: %s)", dataPath)
+		return storage.NewFileBlob(dataPath), storage.NewFileBlob(authPath)
+	}
 }
 
 func env(key, def string) string {

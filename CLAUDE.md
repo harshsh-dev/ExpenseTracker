@@ -37,8 +37,11 @@ Guidance for AI agents (and humans) working in this repo. Read this first, then 
 ```
 backend/cmd/server/main.go        # entrypoint
 backend/internal/domain/          # entities, validation, default categories
-backend/internal/store/           # in-memory store + snapshot persistence
-backend/internal/api/             # chi router, generic crud, backup handlers
+backend/internal/storage/         # blob persistence backends: local file (default) or Firestore
+backend/internal/store/           # in-memory store + snapshot persistence (via storage.Blob)
+backend/internal/auth/            # Notion OAuth login + sessions (optional; auth.json, not in backups)
+backend/internal/notion/          # Notion API client + one-way data sync
+backend/internal/api/             # chi router, generic crud, backup/auth/notion handlers
 frontend/src/api/                 # client + React Query hooks
 frontend/src/modules/             # one folder/file per feature page
 frontend/src/components/ui.tsx    # shared UI primitives
@@ -68,6 +71,8 @@ npm run lint                           # eslint
 ## API surface
 
 `GET/POST /api/{incomes|expenses|investments|categories}`, `PUT/DELETE /api/{resource}/{id}`, `GET /api/backup/export`, `POST /api/backup/import`, `GET /health`.
+
+Auth (active only when `NOTION_CLIENT_ID/SECRET` set; then all routes except `/health`, `/api/config`, `/api/auth/*` require a session cookie): `GET /api/auth/notion/{login|callback}`, `GET /api/auth/me`, `POST /api/auth/logout`. Notion sync: `GET /api/notion/status`, `POST /api/notion/sync`.
 
 ## Workflow expectations
 

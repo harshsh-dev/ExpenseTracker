@@ -10,15 +10,19 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"moneytracker/backend/internal/auth"
 	"moneytracker/backend/internal/config"
 	"moneytracker/backend/internal/domain"
+	"moneytracker/backend/internal/notion"
 	"moneytracker/backend/internal/quotes"
 	"moneytracker/backend/internal/store"
 )
 
 // NewRouter builds the HTTP handler for the API. Only routes for enabled
 // features are mounted; the resolved feature set is advertised at /api/config.
-func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowedOrigins []string) http.Handler {
+// When Notion login is configured (a.Enabled), every route except /health,
+// /api/config and /api/auth/* requires a session.
+func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowedOrigins []string, a *auth.Service, y *notion.Syncer) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -26,10 +30,11 @@ func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowed
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   allowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Content-Type"},
-		AllowCredentials: false,
+		AllowedOrigins: allowedOrigins,
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Accept", "Content-Type"},
+		// Session cookies must survive cross-origin requests when auth is on.
+		AllowCredentials: a.Enabled(),
 		MaxAge:           300,
 	}))
 
@@ -41,46 +46,65 @@ func NewRouter(s *store.Store, q *quotes.Service, feats config.Features, allowed
 		// Always available so the frontend can discover the active features.
 		r.Get("/config", configHandler(feats))
 
-		if feats.Enabled(config.Income) {
-			crud[domain.Income]{
-				list: s.ListIncomes, create: s.CreateIncome,
-				update: s.UpdateIncome, delete: s.DeleteIncome,
-			}.mount(r, "/incomes")
-		}
+		r.Route("/auth", func(r chi.Router) {
+			r.Get("/notion/login", a.BeginLogin)
+			r.Get("/notion/callback", a.HandleCallback)
+			r.Get("/me", meHandler(a))
+			r.Post("/logout", a.Logout)
+		})
 
-		if feats.Enabled(config.Expenses) {
-			crud[domain.Expense]{
-				list: s.ListExpenses, create: s.CreateExpense,
-				update: s.UpdateExpense, delete: s.DeleteExpense,
-			}.mount(r, "/expenses")
-		}
-
-		if feats.Enabled(config.Investments) {
-			crud[domain.Investment]{
-				list: s.ListInvestments, create: s.CreateInvestment,
-				update: s.UpdateInvestment, delete: s.DeleteInvestment,
-			}.mount(r, "/investments")
-
-			r.Route("/quotes", func(r chi.Router) {
-				r.Post("/refresh", refreshPricesHandler(q))
-				r.Get("/search/{kind}", searchHandler(q))
-			})
-		}
-
-		if feats.Enabled(config.Categories) {
-			crud[domain.Category]{
-				list: s.ListCategories, create: s.CreateCategory,
-				update: s.UpdateCategory, delete: s.DeleteCategory,
-			}.mount(r, "/categories")
-		}
-
-		if feats.Enabled(config.Backup) {
-			r.Get("/backup/export", exportHandler(s))
-			r.Post("/backup/import", importHandler(s))
-		}
+		r.Group(func(r chi.Router) {
+			r.Use(a.Middleware)
+			mountResources(r, s, q, feats, a, y)
+		})
 	})
 
 	return r
+}
+
+func mountResources(r chi.Router, s *store.Store, q *quotes.Service, feats config.Features, a *auth.Service, y *notion.Syncer) {
+	if feats.Enabled(config.Income) {
+		crud[domain.Income]{
+			list: s.ListIncomes, create: s.CreateIncome,
+			update: s.UpdateIncome, delete: s.DeleteIncome,
+		}.mount(r, "/incomes")
+	}
+
+	if feats.Enabled(config.Expenses) {
+		crud[domain.Expense]{
+			list: s.ListExpenses, create: s.CreateExpense,
+			update: s.UpdateExpense, delete: s.DeleteExpense,
+		}.mount(r, "/expenses")
+	}
+
+	if feats.Enabled(config.Investments) {
+		crud[domain.Investment]{
+			list: s.ListInvestments, create: s.CreateInvestment,
+			update: s.UpdateInvestment, delete: s.DeleteInvestment,
+		}.mount(r, "/investments")
+
+		r.Route("/quotes", func(r chi.Router) {
+			r.Post("/refresh", refreshPricesHandler(q))
+			r.Get("/search/{kind}", searchHandler(q))
+		})
+	}
+
+	if feats.Enabled(config.Categories) {
+		crud[domain.Category]{
+			list: s.ListCategories, create: s.CreateCategory,
+			update: s.UpdateCategory, delete: s.DeleteCategory,
+		}.mount(r, "/categories")
+	}
+
+	if feats.Enabled(config.Backup) {
+		r.Get("/backup/export", exportHandler(s))
+		r.Post("/backup/import", importHandler(s))
+	}
+
+	r.Route("/notion", func(r chi.Router) {
+		r.Get("/status", notionStatusHandler(a, y))
+		r.Post("/sync", notionSyncHandler(a, y))
+	})
 }
 
 func configHandler(feats config.Features) http.HandlerFunc {

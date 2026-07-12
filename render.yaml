@@ -1,0 +1,45 @@
+# Render blueprint: Go API on the free tier, stateless — the snapshot lives in
+# Firestore (STORAGE_BACKEND=firestore), so spin-downs/redeploys lose nothing.
+# Frontend is served separately by Firebase Hosting.
+services:
+  - type: web
+    name: money-tracker-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: STORAGE_BACKEND
+        value: firestore
+      - key: FIRESTORE_PROJECT_ID
+        value: expense-tracker-2577a
+      # Paste the service-account key JSON in the Render dashboard (never commit it).
+      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+        sync: false
+      - key: FEATURES
+        value: all
+      - key: ALLOWED_ORIGINS
+        value: https://expense-tracker-2577a.web.app,https://expense-tracker-2577a.firebaseapp.com
+      - key: FRONTEND_URL
+        value: https://expense-tracker-2577a.web.app
+      # Hosting and the API are on different domains, so session cookies need
+      # SameSite=None; Secure.
+      - key: CROSS_SITE_COOKIES
+        value: "on"
+      - key: SESSION_SECRET
+        generateValue: true
+      # Notion login — set these in the dashboard once the integration exists.
+      # While unset the API runs OPEN (no login): anyone with the URL can
+      # read/write data.
+      - key: NOTION_CLIENT_ID
+        sync: false
+      - key: NOTION_CLIENT_SECRET
+        sync: false
+      # Set to https://<this-service>.onrender.com/api/auth/notion/callback
+      - key: NOTION_REDIRECT_URI
+        sync: false
+      - key: ALLOWED_NOTION_EMAILS
+        sync: false
+      - key: QUOTES_REFRESH
+        value: "on"

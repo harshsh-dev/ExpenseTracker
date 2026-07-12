@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { IconDownload, IconUpload } from '@tabler/icons-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { IconBrandNotion, IconDownload, IconExternalLink, IconUpload } from '@tabler/icons-react'
 import { api } from '../api/client'
+import { useAuth } from '../auth'
 import type { Snapshot } from '../types'
 import { Button, Card, PageHeader } from '../components/ui'
 
@@ -87,6 +88,8 @@ export default function SettingsPage() {
         </Card>
       </div>
 
+      <NotionSyncCard />
+
       {msg && (
         <div
           className="card"
@@ -102,5 +105,71 @@ export default function SettingsPage() {
         </div>
       )}
     </>
+  )
+}
+
+// One-way export of all data into databases on a "Money Tracker" page in the
+// signed-in user's Notion workspace. Runs server-side; we poll while it runs.
+function NotionSyncCard() {
+  const { enabled } = useAuth()
+  const [err, setErr] = useState<string | null>(null)
+
+  const { data: status, refetch } = useQuery({
+    queryKey: ['notion', 'status'],
+    queryFn: () => api.notionStatus(),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.running ? 2000 : false),
+  })
+
+  if (!enabled) return null
+
+  async function handleSync() {
+    setErr(null)
+    try {
+      await api.notionSync()
+      await refetch()
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+  }
+
+  const last = status?.last
+  const running = status?.running ?? false
+
+  return (
+    <Card className="mt-4">
+      <div className="card-title">
+        <IconBrandNotion size={16} stroke={1.75} style={{ verticalAlign: 'text-bottom' }} />{' '}
+        Notion sync
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
+        Mirror expenses, income, and investments to databases in your Notion
+        workspace{status?.workspaceName ? ` (${status.workspaceName})` : ''}. One-way:
+        the app stays the source of truth.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button onClick={() => void handleSync()} disabled={running}>
+          <IconBrandNotion size={15} stroke={1.75} />
+          {running ? 'Syncing…' : 'Sync to Notion'}
+        </Button>
+        {status?.pageUrl && (
+          <a className="btn btn-ghost" href={status.pageUrl} target="_blank" rel="noreferrer">
+            <IconExternalLink size={15} stroke={1.75} /> Open in Notion
+          </a>
+        )}
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+        {running
+          ? 'Sync in progress — large datasets take a few minutes (Notion rate limits).'
+          : err
+            ? err
+            : last?.error
+              ? `Last sync failed: ${last.error}`
+              : status?.lastSyncedAt
+                ? `Last synced ${new Date(status.lastSyncedAt).toLocaleString()}` +
+                  (last ? ` — ${last.created} created, ${last.updated} updated.` : '.')
+                : 'Never synced yet.'}
+      </p>
+    </Card>
   )
 }

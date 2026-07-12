@@ -10,9 +10,11 @@ import {
   IconWallet,
   IconMoon,
   IconSun,
+  IconLogout,
 } from '@tabler/icons-react'
 import type { Icon } from '@tabler/icons-react'
 import { useTheme } from './theme'
+import { useAuth } from './auth'
 import { useFeatures, type Feature } from './features'
 import Dashboard from './modules/Dashboard'
 import IncomePage from './modules/Income'
@@ -51,6 +53,46 @@ function NavItems({ items }: { items: NavEntry[] }) {
   )
 }
 
+function UserMenu() {
+  const { enabled, user, logout } = useAuth()
+  if (!enabled || !user) return null
+  return (
+    <>
+      <div className="nav-item" style={{ cursor: 'default' }} title={user.email}>
+        {user.avatarUrl ? (
+          <img
+            src={user.avatarUrl}
+            alt=""
+            style={{ width: 17, height: 17, borderRadius: '50%' }}
+          />
+        ) : (
+          <IconBrandNotionDot />
+        )}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</span>
+      </div>
+      <button className="nav-item" onClick={() => void logout()} title="Sign out">
+        <IconLogout size={17} stroke={1.75} />
+        Sign out
+      </button>
+    </>
+  )
+}
+
+// Tiny fallback avatar when the Notion profile has no picture.
+function IconBrandNotionDot() {
+  return (
+    <span
+      style={{
+        width: 17,
+        height: 17,
+        borderRadius: '50%',
+        background: 'var(--color-accent-soft, #8887801f)',
+        display: 'inline-block',
+      }}
+    />
+  )
+}
+
 function ThemeToggle() {
   const { theme, toggle } = useTheme()
   const dark = theme === 'dark'
@@ -76,6 +118,7 @@ export default function App() {
         <NavItems items={items} />
         <div style={{ marginTop: 'auto' }}>
           <ThemeToggle />
+          <UserMenu />
         </div>
       </aside>
 
@@ -83,6 +126,7 @@ export default function App() {
         <nav className="mobile-nav">
           <NavItems items={items} />
           <ThemeToggle />
+          <UserMenu />
         </nav>
         <main className="main">
           <Routes>

@@ -17,3 +17,6 @@ backend/bin/
 .env.local
 .DS_Store
 *.log
+
+# firebase deploy cache
+.firebase/
