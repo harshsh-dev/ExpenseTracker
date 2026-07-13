@@ -53,6 +53,8 @@ frontend/src/types.ts             # TS mirror of the Go domain
 - **Income** (monthly): `source, amount, currency, month, year, receivedOn, note?`.
 - **Expense** (daily): `amount, currency, categoryId, subcategory?, date, paymentMethod, note?`.
 - **Investment**: `name, type, platform?, symbol?, provider, quantity?, amountInvested, currentValue?, currency, investedOn, lastPrice?, lastPriceAt?`. `currentValue`/P&L are computed when `quantity`+`lastPrice` exist.
+- **Recurring**: `kind (expense|sip), name, amount, currency, cadence (monthly|weekly|yearly), startDate, endDate?, paused, categoryId?/subcategory?/paymentMethod? (expense), investmentId? (sip), nextRunOn`. A server scheduler materializes due occurrences (expenses tagged with `recurringId`; SIPs bump the investment's `amountInvested` + units when price-tracked) with backfill after host sleep.
+- **Loan** (money lent): `borrower, principal, currency, lentOn, dueOn?, note?, repayments[] {id, amount, date, note?}`. Outstanding = principal − Σ repayments — computed, never stored.
 - **Category**: `name, color, icon?, subcategories[], archived`.
 
 ## Commands
@@ -70,7 +72,7 @@ npm run lint                           # eslint
 
 ## API surface
 
-`GET/POST /api/{incomes|expenses|investments|categories}`, `PUT/DELETE /api/{resource}/{id}`, `GET /api/backup/export`, `POST /api/backup/import`, `GET /health`.
+`GET/POST /api/{incomes|expenses|investments|recurring|loans|categories}`, `PUT/DELETE /api/{resource}/{id}`, `GET /api/backup/export`, `POST /api/backup/import`, `GET /health`.
 
 Auth (active when `NOTION_CLIENT_ID/SECRET` **or** `APP_PASSWORD` set; then all routes except `/health`, `/api/config`, `/api/auth/*` require a session cookie): `GET /api/auth/notion/{login|callback}`, `POST /api/auth/login` (password mode), `GET /api/auth/me`, `POST /api/auth/logout`. Notion sync (token from OAuth login or `NOTION_TOKEN`): `GET /api/notion/status`, `POST /api/notion/sync` (push), `POST /api/notion/pull` (import Notion edits/additions; deletions never propagate).
 

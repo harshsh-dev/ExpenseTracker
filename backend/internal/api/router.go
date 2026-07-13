@@ -93,6 +93,20 @@ func mountResources(r chi.Router, s *store.Store, q *quotes.Service, feats confi
 		})
 	}
 
+	if feats.Enabled(config.Recurring) {
+		crud[domain.Recurring]{
+			list: s.ListRecurring, create: s.CreateRecurring,
+			update: s.UpdateRecurring, delete: s.DeleteRecurring,
+		}.mount(r, "/recurring")
+	}
+
+	if feats.Enabled(config.Loans) {
+		crud[domain.Loan]{
+			list: s.ListLoans, create: s.CreateLoan,
+			update: s.UpdateLoan, delete: s.DeleteLoan,
+		}.mount(r, "/loans")
+	}
+
 	if feats.Enabled(config.Categories) {
 		crud[domain.Category]{
 			list: s.ListCategories, create: s.CreateCategory,

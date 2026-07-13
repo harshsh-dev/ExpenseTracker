@@ -31,6 +31,7 @@ type Expense struct {
 	Date          string  `json:"date"` // ISO date
 	PaymentMethod string  `json:"paymentMethod"`
 	Note          string  `json:"note,omitempty"`
+	RecurringID   string  `json:"recurringId,omitempty"` // set when auto-created by a recurring rule
 }
 
 // Investment with optional auto price-fetch identity and a price cache.
@@ -51,6 +52,53 @@ type Investment struct {
 	// Price cache (refreshed from a quotes provider; not business source of truth).
 	LastPrice   *float64   `json:"lastPrice,omitempty"`
 	LastPriceAt *time.Time `json:"lastPriceAt,omitempty"`
+}
+
+// Recurring is a schedule that materializes entries automatically: a
+// recurring expense (subscription, EMI) or a SIP contribution into an
+// existing investment. NextRunOn is the materializer's cursor.
+type Recurring struct {
+	Base
+	Kind      string  `json:"kind"` // expense | sip
+	Name      string  `json:"name"`
+	Amount    float64 `json:"amount"`
+	Currency  string  `json:"currency"`
+	Cadence   string  `json:"cadence"`   // monthly | weekly | yearly
+	StartDate string  `json:"startDate"` // ISO date; anchors day-of-month / weekday
+	EndDate   string  `json:"endDate,omitempty"`
+	Paused    bool    `json:"paused"`
+	Note      string  `json:"note,omitempty"`
+
+	// kind == expense
+	CategoryID    string `json:"categoryId,omitempty"`
+	Subcategory   string `json:"subcategory,omitempty"`
+	PaymentMethod string `json:"paymentMethod,omitempty"`
+
+	// kind == sip
+	InvestmentID string `json:"investmentId,omitempty"`
+
+	NextRunOn string `json:"nextRunOn,omitempty"` // next due occurrence (managed by the server)
+}
+
+// Loan given to someone; repaid in EMIs, lump sums, or any order.
+// Outstanding balance is computed (principal − Σ repayments), never stored.
+type Loan struct {
+	Base
+	Borrower   string      `json:"borrower"`
+	Principal  float64     `json:"principal"`
+	Currency   string      `json:"currency"`
+	LentOn     string      `json:"lentOn"` // ISO date
+	DueOn      string      `json:"dueOn,omitempty"`
+	Note       string      `json:"note,omitempty"`
+	Repayments []Repayment `json:"repayments"`
+}
+
+// Repayment is one return payment against a loan.
+type Repayment struct {
+	ID     string  `json:"id"`
+	Amount float64 `json:"amount"`
+	Date   string  `json:"date"` // ISO date
+	Note   string  `json:"note,omitempty"`
 }
 
 // Category for expenses; config-driven and user-editable.

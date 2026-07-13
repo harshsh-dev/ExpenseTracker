@@ -4,6 +4,8 @@ import {
   IconCash,
   IconReceipt,
   IconTrendingUp,
+  IconRepeat,
+  IconHeartHandshake,
   IconTag,
   IconReportAnalytics,
   IconDeviceFloppy,
@@ -20,6 +22,8 @@ import Dashboard from './modules/Dashboard'
 import IncomePage from './modules/Income'
 import ExpensesPage from './modules/Expenses'
 import InvestmentsPage from './modules/Investments'
+import RecurringPage from './modules/Recurring'
+import LoansPage from './modules/Loans'
 import CategoriesPage from './modules/Categories'
 import ReportsPage from './modules/Reports'
 import SettingsPage from './modules/Settings'
@@ -31,6 +35,8 @@ const nav: NavEntry[] = [
   { to: '/income', label: 'Income', icon: IconCash, feature: 'income', element: <IncomePage /> },
   { to: '/expenses', label: 'Expenses', icon: IconReceipt, feature: 'expenses', element: <ExpensesPage /> },
   { to: '/investments', label: 'Investments', icon: IconTrendingUp, feature: 'investments', element: <InvestmentsPage /> },
+  { to: '/recurring', label: 'Recurring', icon: IconRepeat, feature: 'recurring', element: <RecurringPage /> },
+  { to: '/loans', label: 'Loans', icon: IconHeartHandshake, feature: 'loans', element: <LoansPage /> },
   { to: '/reports', label: 'Reports', icon: IconReportAnalytics, feature: 'report', element: <ReportsPage /> },
   { to: '/categories', label: 'Categories', icon: IconTag, feature: 'categories', element: <CategoriesPage /> },
   { to: '/settings', label: 'Backup', icon: IconDeviceFloppy, feature: 'backup', element: <SettingsPage /> },

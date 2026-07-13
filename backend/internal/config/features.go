@@ -24,19 +24,23 @@ const (
 	Income      Feature = "income"
 	Expenses    Feature = "expenses"
 	Investments Feature = "investments"
+	Recurring   Feature = "recurring"
+	Loans       Feature = "loans"
 	Categories  Feature = "categories"
 	Reports     Feature = "report"
 	Backup      Feature = "backup"
 )
 
 // all is the canonical, ordered list of every feature.
-var all = []Feature{Dashboard, Income, Expenses, Investments, Categories, Reports, Backup}
+var all = []Feature{Dashboard, Income, Expenses, Investments, Recurring, Loans, Categories, Reports, Backup}
 
 // deps maps a feature to other features it requires to function. Enabling a
 // feature transitively enables its dependencies (e.g. expenses are categorized,
 // so enabling expenses also enables categories).
 var deps = map[Feature][]Feature{
 	Expenses: {Categories},
+	// Recurring rules materialize expenses and SIP into investments.
+	Recurring: {Expenses, Investments},
 }
 
 // Features is an immutable, resolved set of enabled features.

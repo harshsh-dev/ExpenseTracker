@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import { useFeature } from '../features'
-import type { Category, Expense, Income, Investment } from '../types'
+import type { Category, Expense, Income, Investment, Loan, Recurring } from '../types'
 
 type Map = {
   incomes: Income
   expenses: Expense
   investments: Investment
   categories: Category
+  recurring: Recurring
+  loans: Loan
 }
 
 function useList<K extends keyof Map>(key: K, enabled = true) {
@@ -42,10 +44,15 @@ export const useExpenses = () => useList('expenses', useFeature('expenses'))
 export const useInvestments = () => useList('investments', useFeature('investments'))
 export const useCategories = () => useList('categories', useFeature('categories'))
 
+export const useRecurring = () => useList('recurring', useFeature('recurring'))
+export const useLoans = () => useList('loans', useFeature('loans'))
+
 export const useIncomeCrud = () => useCrud('incomes')
 export const useExpenseCrud = () => useCrud('expenses')
 export const useInvestmentCrud = () => useCrud('investments')
 export const useCategoryCrud = () => useCrud('categories')
+export const useRecurringCrud = () => useCrud('recurring')
+export const useLoanCrud = () => useCrud('loans')
 
 export function useRefreshPrices() {
   const qc = useQueryClient()

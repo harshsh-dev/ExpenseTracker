@@ -62,6 +62,65 @@ func (in *Investment) Validate() error {
 	return nil
 }
 
+func (in *Recurring) Validate() error {
+	if in.Kind != RecurringExpense && in.Kind != RecurringSIP {
+		return errors.New("kind must be expense or sip")
+	}
+	if in.Name == "" {
+		return errors.New("name is required")
+	}
+	if in.Amount <= 0 {
+		return errors.New("amount must be positive")
+	}
+	switch in.Cadence {
+	case CadenceMonthly, CadenceWeekly, CadenceYearly:
+	case "":
+		in.Cadence = CadenceMonthly
+	default:
+		return errors.New("cadence must be monthly, weekly, or yearly")
+	}
+	if in.StartDate == "" {
+		return errors.New("startDate is required")
+	}
+	if in.Kind == RecurringExpense && in.CategoryID == "" {
+		return errors.New("categoryId is required for a recurring expense")
+	}
+	if in.Kind == RecurringSIP && in.InvestmentID == "" {
+		return errors.New("investmentId is required for a SIP")
+	}
+	if in.PaymentMethod == "" {
+		in.PaymentMethod = "other"
+	}
+	if in.Currency == "" {
+		in.Currency = "INR"
+	}
+	return nil
+}
+
+func (in *Loan) Validate() error {
+	if in.Borrower == "" {
+		return errors.New("borrower is required")
+	}
+	if in.Principal <= 0 {
+		return errors.New("principal must be positive")
+	}
+	if in.LentOn == "" {
+		return errors.New("lentOn is required")
+	}
+	for _, r := range in.Repayments {
+		if r.Amount <= 0 {
+			return errors.New("repayment amounts must be positive")
+		}
+		if r.Date == "" {
+			return errors.New("repayment dates are required")
+		}
+	}
+	if in.Currency == "" {
+		in.Currency = "INR"
+	}
+	return nil
+}
+
 func (in *Category) Validate() error {
 	if in.Name == "" {
 		return errors.New("name is required")

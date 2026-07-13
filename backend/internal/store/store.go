@@ -28,6 +28,8 @@ type Store struct {
 	expenses    map[string]domain.Expense
 	investments map[string]domain.Investment
 	categories  map[string]domain.Category
+	recurring   map[string]domain.Recurring
+	loans       map[string]domain.Loan
 }
 
 // New creates a store backed by the given snapshot blob. If the blob exists it
@@ -39,6 +41,8 @@ func New(blob storage.Blob) (*Store, error) {
 		expenses:    map[string]domain.Expense{},
 		investments: map[string]domain.Investment{},
 		categories:  map[string]domain.Category{},
+		recurring:   map[string]domain.Recurring{},
+		loans:       map[string]domain.Loan{},
 	}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -93,6 +97,8 @@ func (s *Store) snapshotLocked() Snapshot {
 			Expenses:    sortedExpenses(s.expenses),
 			Investments: sortedInvestments(s.investments),
 			Categories:  sortedCategories(s.categories),
+			Recurring:   sortedRecurring(s.recurring),
+			Loans:       sortedLoans(s.loans),
 		},
 	}
 }
@@ -102,6 +108,8 @@ func (s *Store) replaceLocked(d SnapshotData) {
 	s.expenses = map[string]domain.Expense{}
 	s.investments = map[string]domain.Investment{}
 	s.categories = map[string]domain.Category{}
+	s.recurring = map[string]domain.Recurring{}
+	s.loans = map[string]domain.Loan{}
 	for _, x := range d.Incomes {
 		s.incomes[x.ID] = x
 	}
@@ -113,6 +121,12 @@ func (s *Store) replaceLocked(d SnapshotData) {
 	}
 	for _, x := range d.Categories {
 		s.categories[x.ID] = x
+	}
+	for _, x := range d.Recurring {
+		s.recurring[x.ID] = x
+	}
+	for _, x := range d.Loans {
+		s.loans[x.ID] = x
 	}
 }
 
@@ -168,6 +182,24 @@ func sortedInvestments(m map[string]domain.Investment) []domain.Investment {
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].InvestedOn > out[j].InvestedOn })
+	return out
+}
+
+func sortedRecurring(m map[string]domain.Recurring) []domain.Recurring {
+	out := make([]domain.Recurring, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+func sortedLoans(m map[string]domain.Loan) []domain.Loan {
+	out := make([]domain.Loan, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].LentOn > out[j].LentOn })
 	return out
 }
 

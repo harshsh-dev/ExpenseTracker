@@ -63,6 +63,9 @@ func main() {
 	if feats.Enabled(config.Investments) {
 		startPriceScheduler(q)
 	}
+	if feats.Enabled(config.Recurring) {
+		startRecurringScheduler(s)
+	}
 
 	srv := &http.Server{
 		Addr:         announceAddr(port),
@@ -110,6 +113,23 @@ func startPriceScheduler(q *quotes.Service) {
 			cancel()
 			log.Printf("price refresh: %d investments processed", len(res.Results))
 			time.Sleep(interval)
+		}
+	}()
+}
+
+// startRecurringScheduler materializes due recurring entries (subscriptions,
+// EMIs, SIPs) shortly after boot — which backfills anything that came due
+// while the host was asleep — and then hourly.
+func startRecurringScheduler(s *store.Store) {
+	go func() {
+		time.Sleep(5 * time.Second)
+		for {
+			if n, err := s.MaterializeRecurring(time.Now()); err != nil {
+				log.Printf("recurring: %v", err)
+			} else if n > 0 {
+				log.Printf("recurring: materialized %d entries", n)
+			}
+			time.Sleep(time.Hour)
 		}
 	}()
 }

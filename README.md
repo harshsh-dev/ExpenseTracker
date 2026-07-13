@@ -103,7 +103,7 @@ Open http://localhost:5173. The Vite dev server proxies API calls to the backend
 | `FIRESTORE_PROJECT_ID` | _(unset)_ | Firebase/GCP project id (`firestore` backend) |
 | `GOOGLE_APPLICATION_CREDENTIALS_JSON` | _(unset)_ | Service-account key JSON with `roles/datastore.user` (`firestore` backend); falls back to ADC when unset |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated CORS origins (set to your frontend URL in prod) |
-| `FEATURES` | `all` | Which features to enable, comma-separated (`income,expenses,investments,categories,dashboard,report,backup`). `all`/empty = full app. See [§7](#7-feature-wise-deployment). |
+| `FEATURES` | `all` | Which features to enable, comma-separated (`income,expenses,investments,recurring,loans,categories,dashboard,report,backup`). `all`/empty = full app. See [§7](#7-feature-wise-deployment). |
 | `QUOTES_REFRESH` | `on` | Set `off` to disable the periodic price auto-refresh |
 | `QUOTES_REFRESH_INTERVAL` | `12h` | How often prices auto-refresh (Go duration) |
 | `APP_PASSWORD_HASH` | _(unset)_ | Enables **password login**: bcrypt hash of the shared password (`go run ./cmd/hashpw '<password>'`) |

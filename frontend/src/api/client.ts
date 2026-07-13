@@ -1,4 +1,4 @@
-import type { Category, Expense, Income, Investment, Snapshot } from '../types'
+import type { Category, Expense, Income, Investment, Loan, Recurring, Snapshot } from '../types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
@@ -135,6 +135,8 @@ export const api = {
   expenses: resource<Expense>('/api/expenses'),
   investments: resource<Investment>('/api/investments'),
   categories: resource<Category>('/api/categories'),
+  recurring: resource<Recurring>('/api/recurring'),
+  loans: resource<Loan>('/api/loans'),
   exportSnapshot: () => request<Snapshot>('GET', '/api/backup/export'),
   importSnapshot: (snap: Snapshot) =>
     request<{ status: string }>('POST', '/api/backup/import', snap),

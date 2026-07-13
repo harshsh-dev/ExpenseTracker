@@ -7,7 +7,10 @@ import (
 )
 
 // SchemaVersion is bumped when the snapshot shape changes (add a migration too).
-const SchemaVersion = 1
+//
+// v2 (2026-07): added recurring rules and loans. Migration from v1 is
+// implicit — the new arrays simply unmarshal as empty for old snapshots.
+const SchemaVersion = 2
 
 // AppName identifies snapshots produced by this app on import.
 const AppName = "money-tracker"
@@ -25,4 +28,6 @@ type SnapshotData struct {
 	Expenses    []domain.Expense    `json:"expenses"`
 	Investments []domain.Investment `json:"investments"`
 	Categories  []domain.Category   `json:"categories"`
+	Recurring   []domain.Recurring  `json:"recurring"`
+	Loans       []domain.Loan       `json:"loans"`
 }

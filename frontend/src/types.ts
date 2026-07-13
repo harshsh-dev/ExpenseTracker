@@ -22,6 +22,7 @@ export interface Expense extends Base {
   date: string
   paymentMethod: PaymentMethod
   note?: string
+  recurringId?: string
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'upi' | 'netbanking' | 'wallet' | 'other'
@@ -61,6 +62,45 @@ export interface Category extends Base {
   archived: boolean
 }
 
+export type RecurringKind = 'expense' | 'sip'
+export type Cadence = 'monthly' | 'weekly' | 'yearly'
+
+export interface Recurring extends Base {
+  kind: RecurringKind
+  name: string
+  amount: number
+  currency: string
+  cadence: Cadence
+  startDate: string
+  endDate?: string
+  paused: boolean
+  note?: string
+  // kind === 'expense'
+  categoryId?: string
+  subcategory?: string
+  paymentMethod?: PaymentMethod
+  // kind === 'sip'
+  investmentId?: string
+  nextRunOn?: string
+}
+
+export interface Repayment {
+  id: string
+  amount: number
+  date: string
+  note?: string
+}
+
+export interface Loan extends Base {
+  borrower: string
+  principal: number
+  currency: string
+  lentOn: string
+  dueOn?: string
+  note?: string
+  repayments: Repayment[]
+}
+
 export interface Snapshot {
   schemaVersion: number
   exportedAt: string
@@ -70,6 +110,8 @@ export interface Snapshot {
     expenses: Expense[]
     investments: Investment[]
     categories: Category[]
+    recurring?: Recurring[]
+    loans?: Loan[]
   }
 }
 
@@ -77,6 +119,14 @@ export interface Snapshot {
 export function investmentCurrentValue(inv: Investment): number | undefined {
   if (inv.quantity != null && inv.lastPrice != null) return inv.quantity * inv.lastPrice
   return inv.currentValue
+}
+
+export function loanRepaid(loan: Loan): number {
+  return loan.repayments.reduce((s, r) => s + r.amount, 0)
+}
+
+export function loanOutstanding(loan: Loan): number {
+  return loan.principal - loanRepaid(loan)
 }
 
 export function investmentPnl(inv: Investment): { value?: number; pct?: number } {
