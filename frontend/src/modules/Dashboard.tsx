@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -9,14 +9,33 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { IconCalendar } from '@tabler/icons-react'
+import { IconCalendar, IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
 import { useCategories, useExpenses, useIncomes, useInvestments } from '../api/hooks'
 import { investmentCurrentValue } from '../types'
-import { Card, Empty } from '../components/ui'
+import { Button, Card, Empty } from '../components/ui'
 import { IncomeAllocationPie } from '../components/IncomeAllocationPie'
-import { formatMoney, isoDateParts, monthName } from '../lib/format'
+import {
+  addDaysISO,
+  formatDayMonth,
+  formatMoney,
+  isoDateParts,
+  monthName,
+  todayISO,
+  weekdayIndex,
+} from '../lib/format'
 import { useTheme } from '../theme'
 import { useFeatures } from '../features'
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+// Short axis-tick form (1.2k / 3L) — formatMoney's currency + decimals are
+// too wide for a Y-axis.
+function compactRupees(v: number): string {
+  if (v >= 1e7) return `${(v / 1e7).toFixed(1)}Cr`
+  if (v >= 1e5) return `${(v / 1e5).toFixed(1)}L`
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k`
+  return String(Math.round(v))
+}
 
 export default function Dashboard() {
   const { theme } = useTheme()
@@ -38,6 +57,7 @@ export default function Dashboard() {
   const { data: expenses = [] } = useExpenses()
   const { data: investments = [] } = useInvestments()
   const { data: categories = [] } = useCategories()
+  const [weekOffset, setWeekOffset] = useState(0)
 
   const totalIncome = incomes.reduce((s, i) => s + i.amount, 0)
   const totalExpense = expenses.reduce((s, e) => s + e.amount, 0)
@@ -67,6 +87,21 @@ export default function Dashboard() {
     }
     return [...map.values()].sort((a, b) => a.key.localeCompare(b.key)).slice(-6)
   }, [incomes, expenses])
+
+  const week = useMemo(() => {
+    const today = todayISO()
+    const sunday = addDaysISO(today, -weekdayIndex(today) + weekOffset * 7)
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const date = addDaysISO(sunday, i)
+      return { date, label: WEEKDAY_LABELS[i], expense: 0 }
+    })
+    const byDate = new Map(days.map((d) => [d.date, d]))
+    for (const e of expenses) {
+      const bucket = byDate.get(e.date)
+      if (bucket) bucket.expense += e.amount
+    }
+    return { sunday, days }
+  }, [expenses, weekOffset])
 
   const byCategory = useMemo(() => {
     const meta = Object.fromEntries(categories.map((c) => [c.id, c]))
@@ -187,6 +222,66 @@ export default function Dashboard() {
                 )}
               </Card>
             </div>
+          )}
+
+          {hasExpenses && (
+            <Card>
+              <div className="mb-1 flex items-center justify-between">
+                <div className="card-title" style={{ margin: 0 }}>
+                  This week's spending
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {formatDayMonth(week.sunday)} – {formatDayMonth(week.days[6].date)}
+                  </span>
+                  <button className="icon-btn" onClick={() => setWeekOffset((w) => w - 1)} title="Previous week">
+                    <IconChevronLeft size={16} stroke={1.75} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    onClick={() => setWeekOffset((w) => Math.min(0, w + 1))}
+                    disabled={weekOffset >= 0}
+                    title="Next week"
+                  >
+                    <IconChevronRight size={16} stroke={1.75} />
+                  </button>
+                  {weekOffset !== 0 && (
+                    <Button variant="ghost" onClick={() => setWeekOffset(0)}>
+                      This week
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div style={{ width: '100%', height: 240 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={week.days} barGap={6}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                    <XAxis dataKey="label" stroke={chart.axis} fontSize={12} tickLine={false} />
+                    <YAxis
+                      stroke={chart.axis}
+                      fontSize={12}
+                      width={52}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => compactRupees(Number(v))}
+                    />
+                    <Tooltip
+                      cursor={{ fill: chart.cursor }}
+                      contentStyle={{
+                        background: chart.tooltipBg,
+                        border: `0.5px solid ${chart.tooltipBorder}`,
+                        borderRadius: 8,
+                        fontSize: 12,
+                        color: chart.tooltipText,
+                      }}
+                      labelStyle={{ color: chart.tooltipText }}
+                      formatter={(v) => formatMoney(Number(v))}
+                    />
+                    <Bar dataKey="expense" name="Expense" fill="#d4537e" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
           )}
 
           {(hasIncome || hasExpenses) && (

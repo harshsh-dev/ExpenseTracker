@@ -46,3 +46,24 @@ export function isoDateParts(iso: string): { year: number; month: number; day: n
   if (!m) return null
   return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) }
 }
+
+// addDaysISO shifts an ISO date by delta days (UTC arithmetic, so no
+// timezone-driven off-by-one).
+export function addDaysISO(iso: string, delta: number): string {
+  const p = isoDateParts(iso)
+  if (!p) return iso
+  return new Date(Date.UTC(p.year, p.month - 1, p.day + delta)).toISOString().slice(0, 10)
+}
+
+// weekdayIndex returns 0 (Sunday) .. 6 (Saturday) for an ISO date.
+export function weekdayIndex(iso: string): number {
+  const p = isoDateParts(iso)
+  if (!p) return 0
+  return new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()
+}
+
+export function formatDayMonth(iso: string): string {
+  const p = isoDateParts(iso)
+  if (!p) return iso
+  return `${p.day} ${monthName(p.month)}`
+}
